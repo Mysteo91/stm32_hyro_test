@@ -93,32 +93,6 @@
  * @}
  */
 
-/** @defgroup B_L475E_IOT01A2_LOW_LEVEL_BUTTON B_L475E_IOT01A2 LOW LEVEL BUTTON
- * @{
- */
-/* Button state */
-#define BUTTON_RELEASED                   0U
-#define BUTTON_PRESSED                    1U
-/** Define number of BUTTON            **/
-#define BUTTONn                           1U
-
-/**
- * @brief User push-button
- */
-  /**  Definition for BSP USER BUTTON   **/
-
-#define USER_BUTTON_PIN	                  GPIO_PIN_13
-#define USER_BUTTON_GPIO_PORT              GPIOC
-#define USER_BUTTON_EXTI_IRQn              EXTI15_10_IRQn
-#define USER_BUTTON_EXTI_LINE              EXTI_LINE_13
-
-#define USER_BUTTON_GPIO_CLK_ENABLE()     __HAL_RCC_GPIOC_CLK_ENABLE()
-#define USER_BUTTON_GPIO_CLK_DISABLE()    __HAL_RCC_GPIOC_CLK_DISABLE()
-
-#define H_EXTI_13			  hpb_exti[BUTTON_USER]
-/**
- * @}
- */
 /** @defgroup B_L475E_IOT01A2_LOW_LEVEL_COM B_L475E_IOT01A2 LOW LEVEL COM
  * @{
  */
@@ -153,29 +127,11 @@
   #define USE_COM_LOG                           1U
 #endif
 
-#ifndef BSP_BUTTON_USER_IT_PRIORITY
-  #define BSP_BUTTON_USER_IT_PRIORITY            15U
-#endif
-
 typedef enum
 {
   LED2 = 0,
   LED_GREEN = LED2,
 }Led_TypeDef;
-
-typedef enum
-{
-  BUTTON_USER = 0U,
-}Button_TypeDef;
-
-/* Keep compatibility with CMSIS Pack already delivered */
-#define BUTTON_KEY BUTTON_USER
-
-typedef enum
-{
-  BUTTON_MODE_GPIO = 0,
-  BUTTON_MODE_EXTI = 1
-} ButtonMode_TypeDef;
 
 #if (USE_BSP_COM_FEATURE > 0)
 typedef enum
@@ -259,7 +215,6 @@ extern UART_HandleTypeDef hcom_uart[COMn];
 /** @defgroup B_L475E_IOT01A2_LOW_LEVEL_Exported_Variables LOW LEVEL Exported Constants
   * @{
   */
-extern EXTI_HandleTypeDef hpb_exti[BUTTONn];
 /**
   * @}
   */
@@ -275,11 +230,6 @@ int32_t  BSP_LED_On(Led_TypeDef Led);
 int32_t  BSP_LED_Off(Led_TypeDef Led);
 int32_t  BSP_LED_Toggle(Led_TypeDef Led);
 int32_t  BSP_LED_GetState(Led_TypeDef Led);
-int32_t  BSP_PB_Init(Button_TypeDef Button, ButtonMode_TypeDef ButtonMode);
-int32_t  BSP_PB_DeInit(Button_TypeDef Button);
-int32_t  BSP_PB_GetState(Button_TypeDef Button);
-void     BSP_PB_Callback(Button_TypeDef Button);
-void     BSP_PB_IRQHandler (Button_TypeDef Button);
 #if (USE_BSP_COM_FEATURE > 0)
 int32_t  BSP_COM_Init(COM_TypeDef COM);
 int32_t  BSP_COM_DeInit(COM_TypeDef COM);

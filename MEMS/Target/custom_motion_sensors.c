@@ -555,7 +555,7 @@ static int32_t LSM6DSL_0_Probe(uint32_t Functions)
 
   /* Configure the driver */
   io_ctx.BusType     = LSM6DSL_I2C_BUS; /* I2C */
-  io_ctx.Address     = LSM6DSL_I2C_ADD_L; /* SA0 = VDD */
+  io_ctx.Address     = LSM6DSL_I2C_ADD_L; /* SA0 = GND */
   io_ctx.Init        = CUSTOM_LSM6DSL_0_I2C_Init;
   io_ctx.DeInit      = CUSTOM_LSM6DSL_0_I2C_DeInit;
   io_ctx.ReadReg     = CUSTOM_LSM6DSL_0_I2C_ReadReg;

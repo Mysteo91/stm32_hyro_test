@@ -57,6 +57,7 @@
 /* External variables --------------------------------------------------------*/
 extern I2C_HandleTypeDef hi2c2;
 extern DMA_HandleTypeDef hdma_usart1_rx;
+extern TIM_HandleTypeDef htim3;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -231,6 +232,20 @@ void EXTI9_5_IRQHandler(void)
 }
 
 /**
+  * @brief This function handles TIM3 global interrupt.
+  */
+void TIM3_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM3_IRQn 0 */
+
+  /* USER CODE END TIM3_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim3);
+  /* USER CODE BEGIN TIM3_IRQn 1 */
+
+  /* USER CODE END TIM3_IRQn 1 */
+}
+
+/**
   * @brief This function handles I2C2 event interrupt.
   */
 void I2C2_EV_IRQHandler(void)
@@ -281,8 +296,7 @@ void EXTI15_10_IRQHandler(void)
 
   /* USER CODE END EXTI15_10_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(LPS22HB_INT_DRDY_EXTI0_Pin);
-  HAL_GPIO_EXTI_IRQHandler(LSM6DSL_INT1_EXTI11_Pin);
-  HAL_EXTI_IRQHandler(&H_EXTI_13);
+  HAL_GPIO_EXTI_IRQHandler(BUTTON_EXTI13_Pin);
   HAL_GPIO_EXTI_IRQHandler(ARD_D2_Pin);
   HAL_GPIO_EXTI_IRQHandler(HTS221_DRDY_EXTI15_Pin);
   /* USER CODE BEGIN EXTI15_10_IRQn 1 */

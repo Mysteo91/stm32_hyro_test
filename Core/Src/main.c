@@ -103,7 +103,7 @@ int main(void)
   MX_RTC_Init();
   MX_MEMS_Init();
   /* USER CODE BEGIN 2 */
-    BSP_LED_Toggle(LED2);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */

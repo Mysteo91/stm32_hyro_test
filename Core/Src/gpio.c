@@ -186,7 +186,7 @@ void MX_GPIO_Init(void)
 
     /*Configure GPIO pins : PDPin PDPin PDPin PDPin
                              PDPin */
-    GPIO_InitStruct.Pin = LPS22HB_INT_DRDY_EXTI0_Pin|LSM6DSL_INT1_EXTI11_Pin|ARD_D2_Pin|HTS221_DRDY_EXTI15_Pin
+    GPIO_InitStruct.Pin = LPS22HB_INT_DRDY_EXTI0_Pin|ARD_D2_Pin|HTS221_DRDY_EXTI15_Pin
                           |PMOD_IRQ_EXTI12_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
     GPIO_InitStruct.Pull = GPIO_NOPULL;

@@ -25,58 +25,69 @@ extern "C" {
 #include "app_mems.h"
 #include "main.h"
 #include <stdio.h>
-
+#include "tim.h"
 #include "stm32l4xx_hal.h"
-#include "stm32l4xx_hal_exti.h"
 #include "b_l475e_iot01a2.h"
-#include "custom_motion_sensors.h"
-#include "custom_motion_sensors_ex.h"
-#include <stdlib.h> /* abs */
+#include "com.h"
+#include "demo_serial.h"
+#include "bsp_ip_conf.h"
+#include "fw_version.h"
+#include "motion_gc_manager.h"
+
 
 /* Private typedef -----------------------------------------------------------*/
-typedef enum
-{
-  STATUS_SELFTEST,
-  STATUS_SLEEP
-} DEMO_STATUS;
-
 /* Private define ------------------------------------------------------------*/
-#define MAX_BUF_SIZE 256
-#define INDICATION_DELAY  1000 /* LED is ON for this period [ms]. */
+#define DWT_LAR_KEY  0xC5ACCE55 /* DWT register unlock key */
+#define ALGO_FREQ  50U /* Algorithm frequency >= 50Hz */
+#define ACC_ODR  ((float)ALGO_FREQ)
+#define ACC_FS  4 /* FS = <-4g, 4g> */
 
-#define X_POWER_UP_DELAY    100 /*!< Delay after accelero power-up [ms] */
-#define X_ST_ENABLED_DELAY  100 /*!< Delay after accelero self-test enabled [ms] */
-#define G_POWER_UP_DELAY    150 /*!< Delay after gyro power-up [ms] */
-#define G_ST_ENABLED_DELAY   50 /*!< Delay after gyro self-test enabled [ms] */
+/* Public variables ----------------------------------------------------------*/
+volatile uint8_t DataLoggerActive = 0;
+volatile uint32_t SensorsEnabled = 0;
+char LibVersion[35];
+int LibVersionLen;
+volatile uint8_t SensorReadRequest = 0;
+uint8_t UseOfflineData = 0;
+offline_data_t OfflineData[OFFLINE_DATA_SIZE];
+int OfflineDataReadIndex = 0;
+int OfflineDataWriteIndex = 0;
+int OfflineDataCount = 0;
+uint32_t AlgoFreq = ALGO_FREQ;
 
-#define N_SAMPLES  5 /*!< Number of samples */
-
-#define X_LO_LIM      90 /*!< Accelero low test limit [mg] */
-#define X_HI_LIM    1700 /*!< Accelero high test limit [mg] */
-#define G_LO_LIM  150000 /*!< Gyro low test limit [mdps] */
-#define G_HI_LIM  700000 /*!< Gyro high test limit [mdps] */
-
-#define ST_REG_COUNT  (sizeof(reg_addr) / sizeof(uint8_t))
-
+/* Extern variables ----------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
-static volatile uint8_t PushButtonDetected = 0;
-static char dataOut[MAX_BUF_SIZE];
-static DEMO_STATUS DemoStatus = STATUS_SLEEP;
-/* Refer to Datasheet / Application Note documents for details about following register settings */
-static uint8_t reg_addr[]        = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19};
-static uint8_t x_st_reg_values[] = {0x38, 0x00, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-static uint8_t g_st_reg_values[] = {0x00, 0x5C, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-static int32_t PushButtonState = GPIO_PIN_RESET;
+static MOTION_SENSOR_Axes_t AccValue;
+static MOTION_SENSOR_Axes_t GyrValue;
+static MOTION_SENSOR_Axes_t MagValue;
+static float PressValue;
+static float TempValue;
+static float HumValue;
+static const uint32_t ReportInterval = 1000U / ALGO_FREQ;
+static MGC_knobs_t Knobs;
 
 /* Private function prototypes -----------------------------------------------*/
-static void MX_LSM6DSL_SelfTest_Init(void);
-static void MX_LSM6DSL_SelfTest_Process(void);
-static void Sleep_Mode(void);
-static int32_t LSM6DSL_X_SelfTest(void);
-static int32_t LSM6DSL_G_SelfTest(void);
-static int32_t LSM6DSL_X_Get_Data(CUSTOM_MOTION_SENSOR_Axes_t *data);
-static int32_t LSM6DSL_G_Get_Data(CUSTOM_MOTION_SENSOR_Axes_t *data);
+static void MX_GyroscopeCalibration_Init(void);
+static void MX_GyroscopeCalibration_Process(void);
+static void GC_Data_Handler(TMsg *Msg);
+static void Init_Sensors(void);
+static void RTC_Handler(TMsg *Msg);
+static void Accelero_Sensor_Handler(TMsg *Msg);
+static void Gyro_Sensor_Handler(TMsg *Msg);
+static void Magneto_Sensor_Handler(TMsg *Msg);
+static void Pressure_Sensor_Handler(TMsg *Msg);
+static void Temperature_Sensor_Handler(TMsg *Msg);
+static void Humidity_Sensor_Handler(TMsg *Msg);
+static void TIM_Config(uint32_t Freq);
+static void DWT_Init(void);
+static void DWT_Start(void);
+static uint32_t DWT_Stop(void);
+
+#ifdef BSP_IP_MEMS_INT1_PIN_NUM
+static void MEMS_INT1_Force_Low(void);
+static void MEMS_INT1_Init(void);
+#endif
 
 void MX_MEMS_Init(void)
 {
@@ -90,7 +101,7 @@ void MX_MEMS_Init(void)
 
   /* Initialize the peripherals and the MEMS components */
 
-  MX_LSM6DSL_SelfTest_Init();
+  MX_GyroscopeCalibration_Init();
 
   /* USER CODE BEGIN MEMS_Init_PostTreatment */
 
@@ -106,523 +117,516 @@ void MX_MEMS_Process(void)
 
   /* USER CODE END MEMS_Process_PreTreatment */
 
-  MX_LSM6DSL_SelfTest_Process();
+  MX_GyroscopeCalibration_Process();
 
   /* USER CODE BEGIN MEMS_Process_PostTreatment */
 
   /* USER CODE END MEMS_Process_PostTreatment */
 }
 
+/* Exported functions --------------------------------------------------------*/
 /**
-  * @brief  Initialize the LSM6DSL Self Test application
+ * @brief  Period elapsed callback
+ * @param  htim pointer to a TIM_HandleTypeDef structure that contains
+ *              the configuration information for TIM module.
+ * @retval None
+ */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == BSP_IP_TIM_Handle.Instance)
+  {
+    SensorReadRequest = 1;
+  }
+}
+
+/* Private functions ---------------------------------------------------------*/
+/**
+  * @brief  Initialize the application
   * @retval None
   */
-void MX_LSM6DSL_SelfTest_Init(void)
+static void MX_GyroscopeCalibration_Init(void)
 {
+  MGC_output_t start_gyro_bias;
+  float sample_frequency;
+
+#ifdef BSP_IP_MEMS_INT1_PIN_NUM
+  /* Force MEMS INT1 pin of the sensor low during startup in order to disable I3C and enable I2C. This function needs
+   * to be called only if user wants to disable I3C / enable I2C and didn't put the pull-down resistor to MEMS INT1 pin
+   * on his HW setup. This is also the case of usage X-NUCLEO-IKS01A2 or X-NUCLEO-IKS01A3 expansion board together with
+   * sensor in DIL24 adapter board where the LDO with internal pull-up is used.
+   */
+  MEMS_INT1_Force_Low();
+#endif
+
   /* Initialize LED */
   BSP_LED_Init(LED2);
-
-  /* Initialize button */
-  BSP_PB_Init(BUTTON_KEY, BUTTON_MODE_EXTI);
-
-  /* Check what is the Push Button State when the button is not pressed. It can change across families */
-  PushButtonState = (BSP_PB_GetState(BUTTON_KEY)) ?  0 : 1;
 
   /* Initialize Virtual COM Port */
   BSP_COM_Init(COM1);
 
-  (void)CUSTOM_MOTION_SENSOR_Init(CUSTOM_LSM6DSL_0, MOTION_ACCELERO | MOTION_GYRO);
+  /* Initialize Timer */
+  BSP_IP_TIM_Init();
 
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\n------ LSM6DSL self-test DEMO ------\r\n");
-  printf("%s", dataOut);
-}
+  /* Configure Timer to run with desired algorithm frequency */
+  TIM_Config(ALGO_FREQ);
 
-/**
-  * @brief  BSP Push Button callback
-  * @param  Button Specifies the pin connected EXTI line
-  * @retval None.
-  */
-void BSP_PB_Callback(Button_TypeDef Button)
-{
-  PushButtonDetected = 1;
-}
+  /* Initialize (disabled) sensors */
+  Init_Sensors();
 
-/**
-  * @brief  Process of the LSM6DSL Self Test application
-  * @retval None
-  */
-void MX_LSM6DSL_SelfTest_Process(void)
-{
-  if (PushButtonDetected != 0U)
-  {
-    /* Debouncing */
-    HAL_Delay(50);
+#ifdef BSP_IP_MEMS_INT1_PIN_NUM
+  /* Initialize MEMS INT1 pin back to it's default state after I3C disable / I2C enable */
+  MEMS_INT1_Init();
+#endif
 
-    /* Wait until the button is released */
-    while ((BSP_PB_GetState( BUTTON_KEY ) == PushButtonState));
+  /* Gyroscope Calibration API initialization function */
+  MotionGC_manager_init((float)ALGO_FREQ);
 
-    /* Debouncing */
-    HAL_Delay(50);
+  /* OPTIONAL */
+  /* Get library version */
+  MotionGC_manager_get_version(LibVersion, &LibVersionLen);
 
-    /* Reset Interrupt flag */
-    PushButtonDetected = 0;
+  /* OPTIONAL */
+  /* Get current settings and set desired ones */
+  MotionGC_GetKnobs(&Knobs);
+  Knobs.AccThr = 0.008f;
+  Knobs.GyroThr = 0.15f;
+  (void)MotionGC_SetKnobs(&Knobs);
 
-    /* _NOTE_: Pushing button creates interrupt/event and wakes up MCU from sleep mode */
-    DemoStatus = STATUS_SELFTEST;
-  }
+  /* OPTIONAL */
+  /* Set initial gyroscope bias */
+  start_gyro_bias.GyroBiasX = 0.0f;
+  start_gyro_bias.GyroBiasY = 0.0f;
+  start_gyro_bias.GyroBiasZ = 0.0f;
+  MotionGC_manager_set_params(&start_gyro_bias);
 
-  /* Handle DEMO State Machine */
-  switch (DemoStatus)
-  {
-    case STATUS_SELFTEST:
-      if (LSM6DSL_X_SelfTest() != BSP_ERROR_NONE)
-      {
-        Error_Handler();
-      }
-      if (LSM6DSL_G_SelfTest() != BSP_ERROR_NONE)
-      {
-        Error_Handler();
-      }
-      DemoStatus = STATUS_SLEEP;
-      break;
+  /* OPTIONAL */
+  /* Set sample frequency */
+  sample_frequency = 1000.0f / (float)ReportInterval;
+  MotionGC_manager_set_frequency(sample_frequency);
 
-    case STATUS_SLEEP:
-      (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\nPress USER button to start the DEMO ...\r\n");
-      printf("%s", dataOut);
-      /* Enter sleep mode */
-      Sleep_Mode();
-      break;
+  DWT_Init();
 
-    default:
-      Error_Handler();
-      break;
-  }
-}
-
-/**
-  * @brief  Enter sleep mode and wait for interrupt
-  * @retval None
-  */
-static void Sleep_Mode(void)
-{
-  SysTick->CTRL &= ~SysTick_CTRL_TICKINT_Msk; /* Systick IRQ OFF */
-  HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
-  SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk; /* Systick IRQ ON */
-}
-
-/**
-  * @brief  Performs LSM6DSL accelerometer self-test
-  * @retval BSP status
-  */
-static int32_t LSM6DSL_X_SelfTest(void)
-{
-  int32_t test_result = BSP_ERROR_NONE;
-  uint32_t i;
-  CUSTOM_MOTION_SENSOR_Axes_t data_nost;
-  CUSTOM_MOTION_SENSOR_Axes_t data_st;
-  CUSTOM_MOTION_SENSOR_Axes_t data;
-  uint8_t prev_reg_values[ST_REG_COUNT];
-  int32_t ret;
-
-  (void)snprintf(dataOut, MAX_BUF_SIZE,
-                 "\r\nStarting LSM6DSL accelerometer self-test ...\r\nKeep the device still!!!\r\n");
-  printf("%s", dataOut);
-
-  HAL_Delay(INDICATION_DELAY);
   BSP_LED_On(LED2);
+  HAL_Delay(500);
+  BSP_LED_Off(LED2);
 
-  /* Store current settings of the sensor */
-  for (i = 0; i < ST_REG_COUNT; i++)
+  /* Start receiving messages via DMA */
+  UART_StartReceiveMsg();
+}
+
+/**
+  * @brief  Process of the application
+  * @retval None
+  */
+static void MX_GyroscopeCalibration_Process(void)
+{
+  static TMsg msg_dat;
+  static TMsg msg_cmd;
+
+  if (UART_ReceivedMSG((TMsg *)&msg_cmd) == 1)
   {
-    if ((ret = CUSTOM_MOTION_SENSOR_Read_Register(CUSTOM_LSM6DSL_0, reg_addr[i], &prev_reg_values[i])) != BSP_ERROR_NONE)
+    if (msg_cmd.Data[0] == DEV_ADDR)
     {
-      return ret;
+      (void)HandleMSG((TMsg *)&msg_cmd);
     }
   }
 
-  /* Set the sensor for self-test */
-  for (i = 0; i < ST_REG_COUNT; i++)
+  if (SensorReadRequest == 1U)
   {
-    if ((ret = CUSTOM_MOTION_SENSOR_Write_Register(CUSTOM_LSM6DSL_0, reg_addr[i], x_st_reg_values[i])) != BSP_ERROR_NONE)
+    SensorReadRequest = 0;
+
+    /* Acquire data from enabled sensors and fill Msg stream */
+    RTC_Handler(&msg_dat);
+    Accelero_Sensor_Handler(&msg_dat);
+    Gyro_Sensor_Handler(&msg_dat);
+    Magneto_Sensor_Handler(&msg_dat);
+    Humidity_Sensor_Handler(&msg_dat);
+    Temperature_Sensor_Handler(&msg_dat);
+    Pressure_Sensor_Handler(&msg_dat);
+
+    /* Gyroscope Calibration specific part */
+    GC_Data_Handler(&msg_dat);
+
+    /* Send data stream */
+    INIT_STREAMING_HEADER(&msg_dat);
+    msg_dat.Len = STREAMING_MSG_LENGTH;
+
+    if (UseOfflineData == 1U)
     {
-      return ret;
+      OfflineDataCount--;
+      if (OfflineDataCount < 0)
+      {
+        OfflineDataCount = 0;
+      }
+
+      OfflineDataReadIndex++;
+      if (OfflineDataReadIndex >= OFFLINE_DATA_SIZE)
+      {
+        OfflineDataReadIndex = 0;
+      }
+
+      if (OfflineDataCount > 0)
+      {
+        SensorReadRequest = 1;
+      }
     }
+    UART_SendMsg(&msg_dat);
   }
+}
 
-  /* Wait defined time for stable output */
-  HAL_Delay(X_POWER_UP_DELAY);
+/**
+ * @brief  Initialize all sensors
+ * @param  None
+ * @retval None
+ */
+static void Init_Sensors(void)
+{
+  BSP_SENSOR_ACC_Init();
+  BSP_SENSOR_GYR_Init();
+  BSP_SENSOR_MAG_Init();
+  BSP_SENSOR_PRESS_Init();
+  BSP_SENSOR_TEMP_Init();
+  BSP_SENSOR_HUM_Init();
 
-  /* Read first data and discard it */
-  if (LSM6DSL_X_Get_Data(&data) != BSP_ERROR_NONE)
-  {
-    Error_Handler();
-  }
+  BSP_SENSOR_ACC_SetOutputDataRate(ACC_ODR);
+  BSP_SENSOR_ACC_SetFullScale(ACC_FS);
+}
 
-  data_nost.x = 0;
-  data_nost.y = 0;
-  data_nost.z = 0;
+/**
+ * @brief  Handles the time+date getting/sending
+ * @param  Msg the time+date part of the stream
+ * @retval None
+ */
+static void RTC_Handler(TMsg *Msg)
+{
+  uint8_t sub_sec = 0;
+  RTC_DateTypeDef sdatestructureget;
+  RTC_TimeTypeDef stimestructure;
+  uint32_t ans_uint32;
+  int32_t ans_int32;
+  uint32_t RtcSynchPrediv = hrtc.Init.SynchPrediv;
 
-  /* Read valid data multiple times and average it */
-  for (i = 0; i < (uint32_t)N_SAMPLES; i++)
+  if (UseOfflineData == 1)
   {
-    if (LSM6DSL_X_Get_Data(&data) != BSP_ERROR_NONE)
-    {
-      Error_Handler();
-    }
-    data_nost.x += data.x;
-    data_nost.y += data.y;
-    data_nost.z += data.z;
-  }
-  data_nost.x /= N_SAMPLES;
-  data_nost.y /= N_SAMPLES;
-  data_nost.z /= N_SAMPLES;
-
-  /* Enable self-test */
-  if ((ret = CUSTOM_MOTION_SENSOR_Set_SelfTest(CUSTOM_LSM6DSL_0, MOTION_ACCELERO, (uint8_t)LSM6DSL_XL_ST_POSITIVE)) != BSP_ERROR_NONE)
-  {
-    return ret;
-  }
-
-  /* Wait defined time for stable output */
-  HAL_Delay(X_ST_ENABLED_DELAY);
-
-  /* Read first data and discard it */
-  if (LSM6DSL_X_Get_Data(&data) != BSP_ERROR_NONE)
-  {
-    Error_Handler();
-  }
-  data_st.x = 0;
-  data_st.y = 0;
-  data_st.z = 0;
-
-  /* Read valid data multiple times and average it */
-  for (i = 0; i < (uint32_t)N_SAMPLES; i++)
-  {
-    if (LSM6DSL_X_Get_Data(&data) != BSP_ERROR_NONE)
-    {
-      Error_Handler();
-    }
-    data_st.x += data.x;
-    data_st.y += data.y;
-    data_st.z += data.z;
-  }
-  data_st.x /= N_SAMPLES;
-  data_st.y /= N_SAMPLES;
-  data_st.z /= N_SAMPLES;
-
-  /* Restore previous settings of the sensor */
-  for (i = 0; i < ST_REG_COUNT; i++)
-  {
-    if ((ret = CUSTOM_MOTION_SENSOR_Write_Register(CUSTOM_LSM6DSL_0, reg_addr[i], prev_reg_values[i])) != BSP_ERROR_NONE)
-    {
-      return ret;
-    }
-  }
-
-  /* Evaluate the test */
-  if (abs(data_st.x - data_nost.x) < X_LO_LIM)
-  {
-    test_result = BSP_ERROR_COMPONENT_FAILURE;
-  }
-  if (abs(data_st.x - data_nost.x) > X_HI_LIM)
-  {
-    test_result = BSP_ERROR_COMPONENT_FAILURE;
-  }
-  if (abs(data_st.y - data_nost.y) < X_LO_LIM)
-  {
-    test_result = BSP_ERROR_COMPONENT_FAILURE;
-  }
-  if (abs(data_st.y - data_nost.y) > X_HI_LIM)
-  {
-    test_result = BSP_ERROR_COMPONENT_FAILURE;
-  }
-  if (abs(data_st.z - data_nost.z) < X_LO_LIM)
-  {
-    test_result = BSP_ERROR_COMPONENT_FAILURE;
-  }
-  if (abs(data_st.z - data_nost.z) > X_HI_LIM)
-  {
-    test_result = BSP_ERROR_COMPONENT_FAILURE;
-  }
-
-  /* Print measured data */
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\nMeasured acceleration [mg]:\r\n");
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\n     AXIS     | PRE-SELFTEST |   SELFTEST\r\n");
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "--------------|--------------|--------------\r\n");
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "       X      | %8ld     | %8ld\r\n", data_nost.x, data_st.x);
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "       Y      | %8ld     | %8ld\r\n", data_nost.y, data_st.y);
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "       Z      | %8ld     | %8ld\r\n", data_nost.z, data_st.z);
-  printf("%s", dataOut);
-
-  /* Print test limits and data */
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\nTest limits and data [mg]:\r\n");
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\n  LOW LIMIT   |  DIFFERENCE  |  HIGH LIMIT\r\n");
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "--------------|--------------|--------------\r\n");
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "%8d      | %8d     | %8d\r\n", X_LO_LIM, (int)abs(data_st.x - data_nost.x), X_HI_LIM);
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "%8d      | %8d     | %8d\r\n", X_LO_LIM, (int)abs(data_st.y - data_nost.y), X_HI_LIM);
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "%8d      | %8d     | %8d\r\n", X_LO_LIM, (int)abs(data_st.z - data_nost.z), X_HI_LIM);
-  printf("%s", dataOut);
-
-  /* Print the test result */
-  if (test_result == BSP_ERROR_NONE)
-  {
-    (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\nLSM6DSL accelerometer self-test PASSED!\r\n");
+    Msg->Data[3] = (uint8_t)OfflineData[OfflineDataReadIndex].hours;
+    Msg->Data[4] = (uint8_t)OfflineData[OfflineDataReadIndex].minutes;
+    Msg->Data[5] = (uint8_t)OfflineData[OfflineDataReadIndex].seconds;
+    Msg->Data[6] = (uint8_t)OfflineData[OfflineDataReadIndex].subsec;
   }
   else
   {
-    (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\nLSM6DSL accelerometer self-test FAILED!\r\n");
+    (void)HAL_RTC_GetTime(&hrtc, &stimestructure, FORMAT_BIN);
+    (void)HAL_RTC_GetDate(&hrtc, &sdatestructureget, FORMAT_BIN);
+
+    /* To be MISRA C-2012 compliant the original calculation:
+       sub_sec = ((((((int)RtcSynchPrediv) - ((int)stimestructure.SubSeconds)) * 100) / (RtcSynchPrediv + 1)) & 0xFF);
+       has been split to separate expressions */
+    ans_int32 = (RtcSynchPrediv - (int32_t)stimestructure.SubSeconds) * 100;
+    ans_int32 /= RtcSynchPrediv + 1;
+    ans_uint32 = (uint32_t)ans_int32 & 0xFFU;
+    sub_sec = (uint8_t)ans_uint32;
+
+    Msg->Data[3] = (uint8_t)stimestructure.Hours;
+    Msg->Data[4] = (uint8_t)stimestructure.Minutes;
+    Msg->Data[5] = (uint8_t)stimestructure.Seconds;
+    Msg->Data[6] = sub_sec;
   }
-  printf("%s", dataOut);
-
-  BSP_LED_Off(LED2);
-
-  return ret;
 }
 
 /**
-  * @brief  Performs LSM6DSL gyroscope self-test
-  * @retval BSP status
-  */
-static int32_t LSM6DSL_G_SelfTest(void)
+ * @brief  Gyroscope Calibration data handler
+ * @param  Msg the Gyroscope Calibration data part of the stream
+ * @retval None
+ */
+static void GC_Data_Handler(TMsg *Msg)
 {
-  uint32_t i;
-  int32_t test_result = BSP_ERROR_NONE;
-  CUSTOM_MOTION_SENSOR_Axes_t data_nost;
-  CUSTOM_MOTION_SENSOR_Axes_t data_st;
-  CUSTOM_MOTION_SENSOR_Axes_t data;
-  uint8_t prev_reg_values[ST_REG_COUNT];
-  int32_t ret;
+  uint32_t elapsed_time_us = 0U;
+  int bias_update = 0;
+  MGC_input_t data_in;
+  MGC_output_t data_out;
+  MOTION_SENSOR_Axes_t GyrComp;
 
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\nStarting LSM6DSL gyroscope self-test ...\r\nKeep the device still!!!\r\n");
-  printf("%s", dataOut);
-
-  HAL_Delay(INDICATION_DELAY);
-  BSP_LED_On(LED2);
-
-  /* Store current settings of the sensor */
-  for (i = 0; i < ST_REG_COUNT; i++)
+  if ((SensorsEnabled & ACCELEROMETER_SENSOR) == ACCELEROMETER_SENSOR)
   {
-    if ((ret = CUSTOM_MOTION_SENSOR_Read_Register(CUSTOM_LSM6DSL_0, reg_addr[i], &prev_reg_values[i])) != BSP_ERROR_NONE)
+    if ((SensorsEnabled & GYROSCOPE_SENSOR) == GYROSCOPE_SENSOR)
     {
-      return ret;
+      /* Convert acceleration from [mg] to [g] */
+      data_in.Acc[0] = (float)AccValue.x / 1000.0f;
+      data_in.Acc[1] = (float)AccValue.y / 1000.0f;
+      data_in.Acc[2] = (float)AccValue.z / 1000.0f;
+
+      /* Convert angular velocity from [mdps] to [dps] */
+      data_in.Gyro[0] = (float)GyrValue.x / 1000.0f;
+      data_in.Gyro[1] = (float)GyrValue.y / 1000.0f;
+      data_in.Gyro[2] = (float)GyrValue.z / 1000.0f;
+
+      /* Run Gyroscope Calibration algorithm */
+      BSP_LED_On(LED2);
+      DWT_Start();
+      MotionGC_manager_update(&data_in, &data_out, &bias_update);
+      elapsed_time_us = DWT_Stop();
+      BSP_LED_Off(LED2);
+
+      /* Do offset & scale factor calibration */
+      MotionGC_manager_compensate(&GyrValue, &GyrComp);
+
+      /* Offset coefficients */
+      Serialize_s32(&Msg->Data[55], (int32_t)gyro_bias_to_mdps(data_out.GyroBiasX), 4);
+      Serialize_s32(&Msg->Data[59], (int32_t)gyro_bias_to_mdps(data_out.GyroBiasY), 4);
+      Serialize_s32(&Msg->Data[63], (int32_t)gyro_bias_to_mdps(data_out.GyroBiasZ), 4);
+
+      /* Calibrated data */
+      Serialize_s32(&Msg->Data[67], (int32_t) GyrComp.x, 4);
+      Serialize_s32(&Msg->Data[71], (int32_t) GyrComp.y, 4);
+      Serialize_s32(&Msg->Data[75], (int32_t) GyrComp.z, 4);
+
+      /* Calibration quality */
+      Serialize_s32(&Msg->Data[79], (int32_t) bias_update, 4);
+
+      Serialize_s32(&Msg->Data[83], (int32_t)elapsed_time_us, 4);
     }
   }
+}
 
-  /* Set the sensor for self-test */
-  for (i = 0; i < ST_REG_COUNT; i++)
+/**
+ * @brief  Handles the ACC axes data getting/sending
+ * @param  Msg the ACC part of the stream
+ * @retval None
+ */
+static void Accelero_Sensor_Handler(TMsg *Msg)
+{
+  if ((SensorsEnabled & ACCELEROMETER_SENSOR) == ACCELEROMETER_SENSOR)
   {
-    if ((ret = CUSTOM_MOTION_SENSOR_Write_Register(CUSTOM_LSM6DSL_0, reg_addr[i], g_st_reg_values[i])) != BSP_ERROR_NONE)
+    if (UseOfflineData == 1)
     {
-      return ret;
+      AccValue.x = OfflineData[OfflineDataReadIndex].acceleration_x_mg;
+      AccValue.y = OfflineData[OfflineDataReadIndex].acceleration_y_mg;
+      AccValue.z = OfflineData[OfflineDataReadIndex].acceleration_z_mg;
     }
+    else
+    {
+      BSP_SENSOR_ACC_GetAxes(&AccValue);
+    }
+
+    Serialize_s32(&Msg->Data[19], (int32_t)AccValue.x, 4);
+    Serialize_s32(&Msg->Data[23], (int32_t)AccValue.y, 4);
+    Serialize_s32(&Msg->Data[27], (int32_t)AccValue.z, 4);
   }
+}
 
-  /* Wait defined time for stable output */
-  HAL_Delay(G_POWER_UP_DELAY);
+/**
+ * @brief  Handles the GYR axes data getting/sending
+ * @param  Msg the GYR part of the stream
+ * @retval None
+ */
+static void Gyro_Sensor_Handler(TMsg *Msg)
+{
+  if ((SensorsEnabled & GYROSCOPE_SENSOR) == GYROSCOPE_SENSOR)
+  {
+    if (UseOfflineData == 1)
+    {
+      GyrValue.x = OfflineData[OfflineDataReadIndex].angular_rate_x_mdps;
+      GyrValue.y = OfflineData[OfflineDataReadIndex].angular_rate_y_mdps;
+      GyrValue.z = OfflineData[OfflineDataReadIndex].angular_rate_z_mdps;
+    }
+    else
+    {
+      BSP_SENSOR_GYR_GetAxes(&GyrValue);
+    }
 
-  /* Read first data and discard it */
-  if (LSM6DSL_G_Get_Data(&data) != BSP_ERROR_NONE)
+    Serialize_s32(&Msg->Data[31], GyrValue.x, 4);
+    Serialize_s32(&Msg->Data[35], GyrValue.y, 4);
+    Serialize_s32(&Msg->Data[39], GyrValue.z, 4);
+  }
+}
+
+/**
+ * @brief  Handles the MAG axes data getting/sending
+ * @param  Msg the MAG part of the stream
+ * @retval None
+ */
+static void Magneto_Sensor_Handler(TMsg *Msg)
+{
+  if ((SensorsEnabled & MAGNETIC_SENSOR) == MAGNETIC_SENSOR)
+  {
+    if (UseOfflineData == 1)
+    {
+     MagValue.x = OfflineData[OfflineDataReadIndex].magnetic_field_x_mgauss;
+     MagValue.y = OfflineData[OfflineDataReadIndex].magnetic_field_y_mgauss;
+     MagValue.z = OfflineData[OfflineDataReadIndex].magnetic_field_z_mgauss;
+    }
+    else
+    {
+      BSP_SENSOR_MAG_GetAxes(&MagValue);
+    }
+
+    Serialize_s32(&Msg->Data[43], MagValue.x, 4);
+    Serialize_s32(&Msg->Data[47], MagValue.y, 4);
+    Serialize_s32(&Msg->Data[51], MagValue.z, 4);
+  }
+}
+
+/**
+ * @brief  Handles the PRESS sensor data getting/sending.
+ * @param  Msg the PRESS part of the stream
+ * @retval None
+ */
+static void Pressure_Sensor_Handler(TMsg *Msg)
+{
+  if ((SensorsEnabled & PRESSURE_SENSOR) == PRESSURE_SENSOR)
+  {
+    if (UseOfflineData == 1)
+    {
+      PressValue = OfflineData[OfflineDataReadIndex].pressure;
+    }
+    else
+    {
+      BSP_SENSOR_PRESS_GetValue(&PressValue);
+    }
+
+    (void)memcpy(&Msg->Data[7], (void *)&PressValue, sizeof(float));
+  }
+}
+
+/**
+ * @brief  Handles the TEMP axes data getting/sending
+ * @param  Msg the TEMP part of the stream
+ * @retval None
+ */
+static void Temperature_Sensor_Handler(TMsg *Msg)
+{
+  if ((SensorsEnabled & TEMPERATURE_SENSOR) == TEMPERATURE_SENSOR)
+  {
+    if (UseOfflineData == 1)
+    {
+      TempValue = OfflineData[OfflineDataReadIndex].temperature;
+    }
+    else
+    {
+      BSP_SENSOR_TEMP_GetValue(&TempValue);
+    }
+
+    (void)memcpy(&Msg->Data[11], (void *)&TempValue, sizeof(float));
+  }
+}
+
+/**
+ * @brief  Handles the HUM axes data getting/sending
+ * @param  Msg the HUM part of the stream
+ * @retval None
+ */
+static void Humidity_Sensor_Handler(TMsg *Msg)
+{
+  if ((SensorsEnabled & HUMIDITY_SENSOR) == HUMIDITY_SENSOR)
+  {
+    if (UseOfflineData == 1)
+    {
+      HumValue = OfflineData[OfflineDataReadIndex].humidity;
+    }
+    else
+    {
+      BSP_SENSOR_HUM_GetValue(&HumValue);
+    }
+
+    (void)memcpy(&Msg->Data[15], (void *)&HumValue, sizeof(float));;
+  }
+}
+
+/**
+ * @brief  Timer configuration
+ * @param  Freq the desired Timer frequency
+ * @retval None
+ */
+static void TIM_Config(uint32_t Freq)
+{
+  const uint32_t tim_counter_clock = 2000; /* TIM counter clock 2 kHz */
+  uint32_t prescaler_value = (uint32_t)((SystemCoreClock / tim_counter_clock) - 1);
+  uint32_t period = (tim_counter_clock / Freq) - 1;
+
+  BSP_IP_TIM_Handle.Init.Prescaler = prescaler_value;
+  BSP_IP_TIM_Handle.Init.CounterMode = TIM_COUNTERMODE_UP;
+  BSP_IP_TIM_Handle.Init.Period = period;
+  BSP_IP_TIM_Handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  BSP_IP_TIM_Handle.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&BSP_IP_TIM_Handle) != HAL_OK)
   {
     Error_Handler();
   }
+    HAL_TIM_Base_Start_IT(&BSP_IP_TIM_Handle);
+}
 
-  data_nost.x = 0;
-  data_nost.y = 0;
-  data_nost.z = 0;
+#ifdef BSP_IP_MEMS_INT1_PIN_NUM
+/**
+ * @brief  Force MEMS INT1 pin low
+ * @param  None
+ * @retval None
+ */
+static void MEMS_INT1_Force_Low(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
 
-  /* Read valid data multiple times and average it */
-  for (i = 0; i < (uint32_t)N_SAMPLES; i++)
-  {
-    if (LSM6DSL_G_Get_Data(&data) != BSP_ERROR_NONE)
-    {
-      Error_Handler();
-    }
-    data_nost.x += data.x;
-    data_nost.y += data.y;
-    data_nost.z += data.z;
-  }
-  data_nost.x /= N_SAMPLES;
-  data_nost.y /= N_SAMPLES;
-  data_nost.z /= N_SAMPLES;
+  GPIO_InitStruct.Pin = BSP_IP_MEMS_INT1_PIN_NUM;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(BSP_IP_MEMS_INT1_GPIOX, &GPIO_InitStruct);
 
-  /* Enable self-test */
-  if ((ret = CUSTOM_MOTION_SENSOR_Set_SelfTest(CUSTOM_LSM6DSL_0, MOTION_GYRO, (uint8_t)LSM6DSL_GY_ST_POSITIVE)) != BSP_ERROR_NONE)
-  {
-    return ret;
-  }
-
-  /* Wait defined time for stable output */
-  HAL_Delay(G_ST_ENABLED_DELAY);
-
-  /* Read first data and discard it */
-  if (LSM6DSL_G_Get_Data(&data) != BSP_ERROR_NONE)
-  {
-    Error_Handler();
-  }
-  data_st.x = 0;
-  data_st.y = 0;
-  data_st.z = 0;
-
-  /* Read valid data multiple times and average it */
-  for (i = 0; i < (uint32_t)N_SAMPLES; i++)
-  {
-    if (LSM6DSL_G_Get_Data(&data) != BSP_ERROR_NONE)
-    {
-      Error_Handler();
-    }
-    data_st.x += data.x;
-    data_st.y += data.y;
-    data_st.z += data.z;
-  }
-  data_st.x /= N_SAMPLES;
-  data_st.y /= N_SAMPLES;
-  data_st.z /= N_SAMPLES;
-
-  /* Restore previous settings of the sensor */
-  for (i = 0; i < ST_REG_COUNT; i++)
-  {
-    if ((ret = CUSTOM_MOTION_SENSOR_Write_Register(CUSTOM_LSM6DSL_0, reg_addr[i], prev_reg_values[i])) != BSP_ERROR_NONE)
-    {
-      return ret;
-    }
-  }
-
-  /* Evaluate the test */
-  if (abs(data_st.x - data_nost.x) < G_LO_LIM)
-  {
-    test_result = BSP_ERROR_COMPONENT_FAILURE;
-  }
-  if (abs(data_st.x - data_nost.x) > G_HI_LIM)
-  {
-    test_result = BSP_ERROR_COMPONENT_FAILURE;
-  }
-  if (abs(data_st.y - data_nost.y) < G_LO_LIM)
-  {
-    test_result = BSP_ERROR_COMPONENT_FAILURE;
-  }
-  if (abs(data_st.y - data_nost.y) > G_HI_LIM)
-  {
-    test_result = BSP_ERROR_COMPONENT_FAILURE;
-  }
-  if (abs(data_st.z - data_nost.z) < G_LO_LIM)
-  {
-    test_result = BSP_ERROR_COMPONENT_FAILURE;
-  }
-  if (abs(data_st.z - data_nost.z) > G_HI_LIM)
-  {
-    test_result = BSP_ERROR_COMPONENT_FAILURE;
-  }
-
-  /* Print measured data */
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\nMeasured angular velocity [mdps]:\r\n");
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\n     AXIS     | PRE-SELFTEST |   SELFTEST\r\n");
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "--------------|--------------|--------------\r\n");
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "       X      |  %8ld    |  %8ld\r\n", data_nost.x, data_st.x);
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "       Y      |  %8ld    |  %8ld\r\n", data_nost.y, data_st.y);
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "       Z      |  %8ld    |  %8ld\r\n", data_nost.z, data_st.z);
-  printf("%s", dataOut);
-
-  /* Print test limits and data */
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\nTest limits and data [mdps]:\r\n");
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\n  LOW LIMIT   |  DIFFERENCE  |  HIGH LIMIT\r\n");
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "--------------|--------------|--------------\r\n");
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "  %8d    |  %8d    |  %8d\r\n", G_LO_LIM, (int)abs(data_st.x - data_nost.x), G_HI_LIM);
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "  %8d    |  %8d    |  %8d\r\n", G_LO_LIM, (int)abs(data_st.y - data_nost.y), G_HI_LIM);
-  printf("%s", dataOut);
-  (void)snprintf(dataOut, MAX_BUF_SIZE, "  %8d    |  %8d    |  %8d\r\n", G_LO_LIM, (int)abs(data_st.z - data_nost.z), G_HI_LIM);
-  printf("%s", dataOut);
-
-  /* Print the test result */
-  if (test_result == BSP_ERROR_NONE)
-  {
-    (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\nLSM6DSL gyroscope self-test PASSED!\r\n");
-  }
-  else
-  {
-    (void)snprintf(dataOut, MAX_BUF_SIZE, "\r\nLSM6DSL gyroscope self-test FAILED!\r\n");
-  }
-  printf("%s", dataOut);
-
-  BSP_LED_Off(LED2);
-
-  return ret;
+  HAL_GPIO_WritePin(BSP_IP_MEMS_INT1_GPIOX, BSP_IP_MEMS_INT1_PIN_NUM, GPIO_PIN_RESET);
 }
 
 /**
-  * @brief  Wait for data ready and get data
-  * @param  data the sensor data
-  * @retval None
-  */
-static int32_t LSM6DSL_X_Get_Data(CUSTOM_MOTION_SENSOR_Axes_t *data)
+ * @brief  Configure MEMS INT1 pin to the default state
+ * @param  None
+ * @retval None
+ */
+static void MEMS_INT1_Init(void)
 {
-  uint8_t status;
-  int32_t ret;
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
 
-  /* Wait for data ready */
-  do
-  {
-    if ((ret = CUSTOM_MOTION_SENSOR_Get_DRDY_Status(CUSTOM_LSM6DSL_0, MOTION_ACCELERO, &status)) != BSP_ERROR_NONE)
-    {
-      return ret;
-    }
-  }
-  while (status == 0U);
+  GPIO_InitStruct.Pin = BSP_IP_MEMS_INT1_PIN_NUM;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(BSP_IP_MEMS_INT1_GPIOX, &GPIO_InitStruct);
+}
+#endif
 
-  /* Read accelero data */
-  if ((ret = CUSTOM_MOTION_SENSOR_GetAxes(CUSTOM_LSM6DSL_0, MOTION_ACCELERO, data)) != BSP_ERROR_NONE)
-  {
-    return ret;
-  }
-
-  return ret;
+/**
+ * @brief  Initialize DWT register for counting clock cycles purpose
+ * @param  None
+ * @retval None
+ */
+static void DWT_Init(void)
+{
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CTRL &= ~DWT_CTRL_CYCCNTENA_Msk; /* Disable counter */
 }
 
 /**
-  * @brief  Wait for data ready and get data
-  * @param  data the sensor data
-  * @retval BSP status
-  */
-static int32_t LSM6DSL_G_Get_Data(CUSTOM_MOTION_SENSOR_Axes_t *data)
+ * @brief  Start counting clock cycles
+ * @param  None
+ * @retval None
+ */
+static void DWT_Start(void)
 {
-  uint8_t status;
-  int32_t ret;
+  DWT->CYCCNT = 0; /* Clear count of clock cycles */
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk; /* Enable counter */
+}
 
-  /* Wait for data ready */
-  do
-  {
-    if ((ret = CUSTOM_MOTION_SENSOR_Get_DRDY_Status(CUSTOM_LSM6DSL_0, MOTION_GYRO, &status)) != BSP_ERROR_NONE)
-    {
-      return ret;
-    }
-  }
-  while (status == 0U);
+/**
+ * @brief  Stop counting clock cycles and calculate elapsed time in [us]
+ * @param  None
+ * @retval Elapsed time in [us]
+ */
+static uint32_t DWT_Stop(void)
+{
+  volatile uint32_t cycles_count = 0U;
+  uint32_t system_core_clock_mhz = 0U;
 
-  /* Read accelero data */
-  if ((ret = CUSTOM_MOTION_SENSOR_GetAxes(CUSTOM_LSM6DSL_0, MOTION_GYRO, data)) != BSP_ERROR_NONE)
-  {
-    return ret;
-  }
+  DWT->CTRL &= ~DWT_CTRL_CYCCNTENA_Msk; /* Disable counter */
+  cycles_count = DWT->CYCCNT; /* Read count of clock cycles */
 
-  return ret;
+  /* Calculate elapsed time in [us] */
+  system_core_clock_mhz = SystemCoreClock / 1000000U;
+  return cycles_count / system_core_clock_mhz;
 }
 
 #ifdef __cplusplus
