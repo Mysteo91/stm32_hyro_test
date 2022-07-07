@@ -33,6 +33,9 @@ static CUSTOM_MOTION_SENSOR_Ctx_t MotionCtx[CUSTOM_MOTION_INSTANCES_NBR];
 #if (USE_CUSTOM_MOTION_SENSOR_LSM6DSL_0 == 1)
 static int32_t LSM6DSL_0_Probe(uint32_t Functions);
 #endif
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+static int32_t LIS3MDL_0_Probe(uint32_t Functions);
+#endif
 
 /**
   * @brief  Initializes the motion sensors
@@ -56,6 +59,30 @@ int32_t CUSTOM_MOTION_SENSOR_Init(uint32_t Instance, uint32_t Functions)
 #if (USE_CUSTOM_MOTION_SENSOR_LSM6DSL_0 == 1)
     case CUSTOM_LSM6DSL_0:
       if (LSM6DSL_0_Probe(Functions) != BSP_ERROR_NONE)
+      {
+        return BSP_ERROR_NO_INIT;
+      }
+      if (MotionDrv[Instance]->GetCapabilities(MotionCompObj[Instance], (void *)&cap) != BSP_ERROR_NONE)
+      {
+        return BSP_ERROR_UNKNOWN_COMPONENT;
+      }
+      if (cap.Acc == 1U)
+      {
+        component_functions |= MOTION_ACCELERO;
+      }
+      if (cap.Gyro == 1U)
+      {
+        component_functions |= MOTION_GYRO;
+      }
+      if (cap.Magneto == 1U)
+      {
+        component_functions |= MOTION_MAGNETO;
+      }
+      break;
+#endif
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      if (LIS3MDL_0_Probe(Functions) != BSP_ERROR_NONE)
       {
         return BSP_ERROR_NO_INIT;
       }
@@ -612,6 +639,81 @@ static int32_t LSM6DSL_0_Probe(uint32_t Functions)
       }
     }
     if ((ret == BSP_ERROR_NONE) && ((Functions & MOTION_MAGNETO) == MOTION_MAGNETO))
+    {
+      /* Return an error if the application try to initialize a function not supported by the component */
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+    }
+  }
+
+  return ret;
+}
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+/**
+ * @brief  Register Bus IOs for LIS3MDL instance
+ * @param  Functions Motion sensor functions. Could be :
+ *         - MOTION_MAGNETO
+ * @retval BSP status
+ */
+static int32_t LIS3MDL_0_Probe(uint32_t Functions)
+{
+  LIS3MDL_IO_t            io_ctx;
+  uint8_t                 id;
+  static LIS3MDL_Object_t lis3mdl_obj_0;
+  LIS3MDL_Capabilities_t  cap;
+  int32_t                 ret = BSP_ERROR_NONE;
+
+  /* Configure the driver */
+  io_ctx.BusType     = LIS3MDL_I2C_BUS; /* I2C */
+  io_ctx.Address     = LIS3MDL_I2C_ADD_H; /* SA0 = VDD */
+  io_ctx.Init        = CUSTOM_LIS3MDL_0_I2C_Init;
+  io_ctx.DeInit      = CUSTOM_LIS3MDL_0_I2C_DeInit;
+  io_ctx.ReadReg     = CUSTOM_LIS3MDL_0_I2C_ReadReg;
+  io_ctx.WriteReg    = CUSTOM_LIS3MDL_0_I2C_WriteReg;
+  io_ctx.GetTick     = BSP_GetTick;
+
+  if (LIS3MDL_RegisterBusIO(&lis3mdl_obj_0, &io_ctx) != LIS3MDL_OK)
+  {
+    ret = BSP_ERROR_UNKNOWN_COMPONENT;
+  }
+  else if (LIS3MDL_ReadID(&lis3mdl_obj_0, &id) != LIS3MDL_OK)
+  {
+    ret = BSP_ERROR_UNKNOWN_COMPONENT;
+  }
+  else if (id != (uint8_t)LIS3MDL_ID)
+  {
+    ret = BSP_ERROR_UNKNOWN_COMPONENT;
+  }
+  else
+  {
+    (void)LIS3MDL_GetCapabilities(&lis3mdl_obj_0, &cap);
+    MotionCtx[CUSTOM_LIS3MDL_0].Functions = ((uint32_t)cap.Gyro) | ((uint32_t)cap.Acc << 1) | ((uint32_t)cap.Magneto << 2);
+
+    MotionCompObj[CUSTOM_LIS3MDL_0] = &lis3mdl_obj_0;
+    /* The second cast (void *) is added to bypass Misra R11.3 rule */
+    MotionDrv[CUSTOM_LIS3MDL_0] = (MOTION_SENSOR_CommonDrv_t *)(void *)&LIS3MDL_COMMON_Driver;
+
+    if ((ret == BSP_ERROR_NONE) && ((Functions & MOTION_MAGNETO) == MOTION_MAGNETO) && (cap.Magneto == 1U))
+    {
+      /* The second cast (void *) is added to bypass Misra R11.3 rule */
+      MotionFuncDrv[CUSTOM_LIS3MDL_0][FunctionIndex[MOTION_MAGNETO]] = (MOTION_SENSOR_FuncDrv_t *)(void *)&LIS3MDL_MAG_Driver;
+
+      if (MotionDrv[CUSTOM_LIS3MDL_0]->Init(MotionCompObj[CUSTOM_LIS3MDL_0]) != LIS3MDL_OK)
+      {
+        ret = BSP_ERROR_COMPONENT_FAILURE;
+      }
+      else
+      {
+        ret = BSP_ERROR_NONE;
+      }
+    }
+    if ((ret == BSP_ERROR_NONE) && ((Functions & MOTION_ACCELERO) == MOTION_ACCELERO))
+    {
+      /* Return an error if the application try to initialize a function not supported by the component */
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+    }
+    if ((ret == BSP_ERROR_NONE) && ((Functions & MOTION_GYRO) == MOTION_GYRO))
     {
       /* Return an error if the application try to initialize a function not supported by the component */
       ret = BSP_ERROR_COMPONENT_FAILURE;

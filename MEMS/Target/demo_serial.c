@@ -25,7 +25,8 @@
 #include "com.h"
 #include "demo_serial.h"
 #include "fw_version.h"
-#include "motion_di_manager.h"
+#include "motion_mc_manager.h"
+#include "motion_ec_manager.h"
 
 #ifdef USE_CUSTOM_BOARD
 #include "custom_mems_conf_app.h"
@@ -398,56 +399,6 @@ int HandleMSG(TMsg *Msg)
       UART_SendMsg(Msg);
       break;
 
-    case CMD_Calibration_Mode:
-      if (Msg->Len < 5U)
-      {
-        return 0;
-      }
-
-      switch ((uint32_t)Msg->Data[3])
-      {
-        case ACCELEROMETER_SENSOR:
-          MotionDI_set_acc_calibration_mode((MDI_cal_type_t)Msg->Data[4]);
-          break;
-
-        case GYROSCOPE_SENSOR:
-          MotionDI_set_gyro_calibration_mode((MDI_cal_type_t)Msg->Data[4]);
-          break;
-
-        default:
-          break;
-      }
-
-      BUILD_REPLY_HEADER(Msg);
-      Msg->Len = 5;
-      UART_SendMsg(Msg);
-      break;
-
-    case CMD_Calibration_Reset:
-      if (Msg->Len < 4U)
-      {
-        return 0;
-      }
-
-      switch ((uint32_t)Msg->Data[3])
-      {
-        case ACCELEROMETER_SENSOR:
-          MotionDI_reset_acc_calibration();
-          break;
-
-        case GYROSCOPE_SENSOR:
-          MotionDI_reset_gyro_calibration();
-          break;
-
-        default:
-          break;
-      }
-
-      BUILD_REPLY_HEADER(Msg);
-      Msg->Len = 4;
-      UART_SendMsg(Msg);
-      break;
-
     default:
       ret = 0;
       break;
@@ -518,9 +469,9 @@ void Get_PresentationString(char *PresentationString, uint32_t *Length)
   char *lib_version_num;
   char lib_version_string[64];
   int lib_version_len = 0;
-  const char ps[] = {"MEMS shield demo,26,"FW_VERSION",%s,"BOARD_NAME};
+  const char ps[] = {"MEMS shield demo,12,"FW_VERSION",%s,"BOARD_NAME};
 
-  MotionDI_manager_get_version(lib_version_string, &lib_version_len);
+  MotionEC_manager_get_version(lib_version_string, &lib_version_len);
 
   /* Shorten library version string (e.g.: ST MotionXX v1.0.0 resp. ST MotionXXX v1.0.0) to contain version number only (e.g.: 1.0.0) */
   if (lib_version_len > string_pointer_shift)

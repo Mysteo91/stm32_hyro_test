@@ -32,21 +32,16 @@ extern "C" {
 #include "demo_serial.h"
 #include "bsp_ip_conf.h"
 #include "fw_version.h"
-#include "motion_di_manager.h"
+#include "motion_mc_manager.h"
+#include "motion_ec_manager.h"
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 #define DWT_LAR_KEY  0xC5ACCE55 /* DWT register unlock key */
-#define ALGO_FREQ  100U /* Algorithm frequency 100Hz */
+#define ALGO_FREQ  50U /* Algorithm frequency >= 50Hz */
 #define ACC_ODR  ((float)ALGO_FREQ)
+#define MAG_ODR  ((float)ALGO_FREQ)
 #define ACC_FS  2 /* FS = <-2g, 2g> */
-#define ALGO_PERIOD  (1000000U / ALGO_FREQ) /* Algorithm period [us] */
-#define FROM_MG_TO_G  0.001f
-#define FROM_G_TO_MG  1000.0f
-#define FROM_MDPS_TO_DPS  0.001f
-#define FROM_DPS_TO_MDPS  1000.0f
-#define FROM_MGAUSS_TO_UT50  (0.1f/50.0f)
-#define FROM_UT50_TO_MGAUSS  500.0f
 
 /* Public variables ----------------------------------------------------------*/
 volatile uint8_t DataLoggerActive = 0;
@@ -60,8 +55,6 @@ int OfflineDataReadIndex = 0;
 int OfflineDataWriteIndex = 0;
 int OfflineDataCount = 0;
 uint32_t AlgoFreq = ALGO_FREQ;
-MDI_cal_type_t AccCalMode = MDI_CAL_NONE;
-MDI_cal_type_t GyrCalMode = MDI_CAL_NONE;
 
 /* Extern variables ----------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
@@ -72,12 +65,15 @@ static MOTION_SENSOR_Axes_t MagValue;
 static float PressValue;
 static float TempValue;
 static float HumValue;
-static int64_t Timestamp = 0;
+static const uint32_t ReportInterval = 1000U / ALGO_FREQ;
+static volatile uint32_t TimeStamp = 0;
+static MOTION_SENSOR_Axes_t MagValueComp; /* Compensated magnetometer data [mGauss] */
 
 /* Private function prototypes -----------------------------------------------*/
-static void MX_DynamicInclinometer_Init(void);
-static void MX_DynamicInclinometer_Process(void);
-static void DI_Data_Handler(TMsg *Msg, TMsg *Cmd);
+static void MX_ECompass_Init(void);
+static void MX_ECompass_Process(void);
+static void MC_Data_Handler(TMsg *Msg);
+static void EC_Data_Handler(TMsg *Msg);
 static void Init_Sensors(void);
 static void RTC_Handler(TMsg *Msg);
 static void Accelero_Sensor_Handler(TMsg *Msg);
@@ -108,7 +104,7 @@ void MX_MEMS_Init(void)
 
   /* Initialize the peripherals and the MEMS components */
 
-  MX_DynamicInclinometer_Init();
+  MX_ECompass_Init();
 
   /* USER CODE BEGIN MEMS_Init_PostTreatment */
 
@@ -124,7 +120,7 @@ void MX_MEMS_Process(void)
 
   /* USER CODE END MEMS_Process_PreTreatment */
 
-  MX_DynamicInclinometer_Process();
+  MX_ECompass_Process();
 
   /* USER CODE BEGIN MEMS_Process_PostTreatment */
 
@@ -151,7 +147,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   * @brief  Initialize the application
   * @retval None
   */
-static void MX_DynamicInclinometer_Init(void)
+static void MX_ECompass_Init(void)
 {
 #ifdef BSP_IP_MEMS_INT1_PIN_NUM
   /* Force MEMS INT1 pin of the sensor low during startup in order to disable I3C and enable I2C. This function needs
@@ -182,12 +178,15 @@ static void MX_DynamicInclinometer_Init(void)
   MEMS_INT1_Init();
 #endif
 
-  /* DynamicInclinometer API initialization function */
-  MotionDI_manager_init((int)ALGO_FREQ);
+  /* Magnetometer Calibration API initialization function */
+  MotionMC_manager_init(ReportInterval, 1);
+
+  /* E-Compass API initialization function */
+  MotionEC_manager_init((float)ALGO_FREQ);
 
   /* OPTIONAL */
   /* Get library version */
-  MotionDI_manager_get_version(LibVersion, &LibVersionLen);
+  MotionEC_manager_get_version(LibVersion, &LibVersionLen);
 
   DWT_Init();
 
@@ -203,7 +202,7 @@ static void MX_DynamicInclinometer_Init(void)
   * @brief  Process of the application
   * @retval None
   */
-static void MX_DynamicInclinometer_Process(void)
+static void MX_ECompass_Process(void)
 {
   static TMsg msg_dat;
   static TMsg msg_cmd;
@@ -229,8 +228,11 @@ static void MX_DynamicInclinometer_Process(void)
     Temperature_Sensor_Handler(&msg_dat);
     Pressure_Sensor_Handler(&msg_dat);
 
-    /* DynamicInclinometer specific part */
-    DI_Data_Handler(&msg_dat, &msg_cmd);
+    /* Magnetometer Calibration specific part */
+    MC_Data_Handler(&msg_dat);
+
+    /* E-Compass specific part */
+    EC_Data_Handler(&msg_dat);
 
     /* Send data stream */
     INIT_STREAMING_HEADER(&msg_dat);
@@ -275,6 +277,7 @@ static void Init_Sensors(void)
 
   BSP_SENSOR_ACC_SetOutputDataRate(ACC_ODR);
   BSP_SENSOR_ACC_SetFullScale(ACC_FS);
+  BSP_SENSOR_MAG_SetOutputDataRate(MAG_ODR);
 }
 
 /**
@@ -319,104 +322,122 @@ static void RTC_Handler(TMsg *Msg)
 }
 
 /**
- * @brief  Dynamic Inclinometer data handler
- * @param  Msg the Dynamic Inclinometer data part of the stream
- * @param  Cmd the Dynamic Inclinometer command to GUI
+ * @brief  Magnetometer Calibration data handler
+ * @param  Msg the Magnetometer Calibration data part of the stream
  * @retval None
  */
-static void DI_Data_Handler(TMsg *Msg, TMsg *Cmd)
+static void MC_Data_Handler(TMsg *Msg)
 {
-  uint32_t         elapsed_time_us = 0U;
-  MDI_input_t      data_in;
-  MDI_output_t     data_out;
-  MDI_cal_type_t   acc_cal_mode;
-  MDI_cal_type_t   gyro_cal_mode;
-  MDI_cal_output_t acc_cal;
-  MDI_cal_output_t gyro_cal;
+  MMC_Input_t data_in;
+  MMC_Output_t data_out;
 
-  if ((SensorsEnabled & ACCELEROMETER_SENSOR) == ACCELEROMETER_SENSOR)
+  if ((SensorsEnabled & MAGNETIC_SENSOR) != MAGNETIC_SENSOR)
   {
-    if ((SensorsEnabled & GYROSCOPE_SENSOR) == GYROSCOPE_SENSOR)
-    {
-      /* Convert acceleration from [mg] to [g] */
-      data_in.Acc[0] = (float)AccValue.x * FROM_MG_TO_G;
-      data_in.Acc[1] = (float)AccValue.y * FROM_MG_TO_G;
-      data_in.Acc[2] = (float)AccValue.z * FROM_MG_TO_G;
-
-      /* Convert angular velocity from [mdps] to [dps] */
-      data_in.Gyro[0] = (float)GyrValue.x * FROM_MDPS_TO_DPS;
-      data_in.Gyro[1] = (float)GyrValue.y * FROM_MDPS_TO_DPS;
-      data_in.Gyro[2] = (float)GyrValue.z * FROM_MDPS_TO_DPS;
-
-      data_in.Timestamp = Timestamp;
-      Timestamp += ALGO_PERIOD;
-
-      /* Run Dynamic Inclinometer algorithm */
-      BSP_LED_On(LED2);
-      DWT_Start();
-      MotionDI_manager_run(&data_in, &data_out);
-      elapsed_time_us = DWT_Stop();
-      BSP_LED_Off(LED2);
-
-      /* Check calibration mode */
-      MotionDI_get_acc_calibration_mode(&acc_cal_mode);
-      MotionDI_get_gyro_calibration_mode(&gyro_cal_mode);
-
-      if (acc_cal_mode != AccCalMode)
-      {
-        AccCalMode = acc_cal_mode;
-
-        INIT_STREAMING_HEADER(Cmd);
-        Cmd->Data[2] = CMD_Calibration_Mode + CMD_Reply_Add;
-        Cmd->Data[3] = (uint8_t)ACCELEROMETER_SENSOR;
-        Cmd->Data[4] = (uint8_t)AccCalMode;
-        Cmd->Len = 5;
-        UART_SendMsg(Cmd);
-      }
-
-      if (gyro_cal_mode != GyrCalMode)
-      {
-        GyrCalMode = gyro_cal_mode;
-
-        INIT_STREAMING_HEADER(Cmd);
-        Cmd->Data[2] = CMD_Calibration_Mode + CMD_Reply_Add;
-        Cmd->Data[3] = (uint8_t)GYROSCOPE_SENSOR;
-        Cmd->Data[4] = (uint8_t)GyrCalMode;
-        Cmd->Len = 5;
-        UART_SendMsg(Cmd);
-      }
-
-      /* Get calibration parameters */
-      MotionDI_get_acc_calibration(&acc_cal);
-      MotionDI_get_gyro_calibration(&gyro_cal);
-
-      /* Convert accelerometer calibration parameters from [g] to [mg] */
-      acc_cal.Bias[0] *= FROM_G_TO_MG;
-      acc_cal.Bias[1] *= FROM_G_TO_MG;
-      acc_cal.Bias[2] *= FROM_G_TO_MG;
-
-      /* Convert gyroscope calibration parameters from [dps] to [mdps] */
-      gyro_cal.Bias[0] *= FROM_DPS_TO_MDPS;
-      gyro_cal.Bias[1] *= FROM_DPS_TO_MDPS;
-      gyro_cal.Bias[2] *= FROM_DPS_TO_MDPS;
-
-      (void)memcpy(&Msg->Data[55], (void *)data_out.quaternion, 4U * sizeof(float));
-      (void)memcpy(&Msg->Data[71], (void *)data_out.rotation, 3U * sizeof(float));
-      (void)memcpy(&Msg->Data[83], (void *)data_out.gravity, 3U * sizeof(float));
-      (void)memcpy(&Msg->Data[95], (void *)data_out.linear_acceleration, 3U * sizeof(float));
-
-      (void)memcpy(&Msg->Data[107], (void *)acc_cal.Bias, 3U * sizeof(float));
-      (void)memcpy(&Msg->Data[119], (void *) & (acc_cal.SF_Matrix[0][0]), sizeof(float));
-      (void)memcpy(&Msg->Data[123], (void *) & (acc_cal.SF_Matrix[1][1]), sizeof(float));
-      (void)memcpy(&Msg->Data[127], (void *) & (acc_cal.SF_Matrix[2][2]), sizeof(float));
-      Msg->Data[131] = (uint8_t)acc_cal.CalQuality;
-
-      (void)memcpy(&Msg->Data[132], (void *)gyro_cal.Bias, 3U * sizeof(float));
-      Msg->Data[144] = (uint8_t)gyro_cal.CalQuality;
-
-      Serialize_s32(&Msg->Data[145], (int32_t)elapsed_time_us, 4);
-    }
+    return;
   }
+
+  /* Convert magnetometer data from [mGauss] to [uT] */
+  data_in.Mag[0] = (float)MagValue.x / 10.0f;
+  data_in.Mag[1] = (float)MagValue.y / 10.0f;
+  data_in.Mag[2] = (float)MagValue.z / 10.0f;
+
+  /* Time stamp [ms] */
+  data_in.TimeStamp = (int)(TimeStamp * ReportInterval);
+
+  /* Run Magnetometer Calibration algorithm */
+  MotionMC_manager_update(&data_in);
+
+  /* Get the magnetometer compensation for hard/soft iron */
+  MotionMC_manager_get_params(&data_out);
+
+  /* Do hard & soft iron calibration */
+  MotionMC_manager_compensate(&MagValue, &MagValueComp);
+
+  /* Calibrated data */
+  /* NOTE: Magnetometer data unit is [mGauss] */
+  Serialize_s32(&Msg->Data[43], MagValueComp.x, 4);
+  Serialize_s32(&Msg->Data[47], MagValueComp.y, 4);
+  Serialize_s32(&Msg->Data[51], MagValueComp.z, 4);
+
+  /* Calibration quality */
+  Msg->Data[124] = (uint8_t)data_out.CalQuality;
+}
+
+/**
+ * @brief  E-Compass data handler
+ * @param  Msg the E-Compass data part of the stream
+ * @retval None
+ */
+static void EC_Data_Handler(TMsg *Msg)
+{
+  uint32_t elapsed_time_us = 0U;
+  MEC_input_t  data_in;
+  MEC_output_t data_out;
+
+  if ((SensorsEnabled & ACCELEROMETER_SENSOR) != ACCELEROMETER_SENSOR)
+  {
+    return;
+  }
+
+  if ((SensorsEnabled & MAGNETIC_SENSOR) != MAGNETIC_SENSOR)
+  {
+    return;
+  }
+
+  /* Do sensor orientation transformation */
+  MotionEC_manager_transform_orientation(&AccValue, &MagValueComp, data_in.acc, data_in.mag);
+
+  /* Convert raw accelerometer data from [mg] to [g] */
+  data_in.acc[0] = data_in.acc[0] / 1000.0f; /* East */
+  data_in.acc[1] = data_in.acc[1] / 1000.0f; /* North */
+  data_in.acc[2] = data_in.acc[2] / 1000.0f; /* Up */
+
+  /* Convert compensated magnetometer data from [mGauss] to [uT / 50], [mGauss / 5] */
+  data_in.mag[0] = data_in.mag[0] / 5.0f; /* East */
+  data_in.mag[1] = data_in.mag[1] / 5.0f; /* North */
+  data_in.mag[2] = data_in.mag[2] / 5.0f; /* Up */
+
+  /* Delta time [s] */
+  data_in.deltatime_s = (float)ReportInterval / 1000.0f;
+
+  /* Run E-Compass algorithm */
+  BSP_LED_On(LED2);
+  DWT_Start();
+  MotionEC_manager_run(&data_in, &data_out);
+  elapsed_time_us = DWT_Stop();
+  BSP_LED_Off(LED2);
+
+  /* Write data to output stream */
+  FloatToArray(&Msg->Data[55], data_out.quaternion[0]);
+  FloatToArray(&Msg->Data[59], data_out.quaternion[1]);
+  FloatToArray(&Msg->Data[63], data_out.quaternion[2]);
+  FloatToArray(&Msg->Data[67], data_out.quaternion[3]);
+
+  FloatToArray(&Msg->Data[71], data_out.euler[0]);
+  FloatToArray(&Msg->Data[75], data_out.euler[1]);
+  FloatToArray(&Msg->Data[79], data_out.euler[2]);
+
+  FloatToArray(&Msg->Data[83], data_out.i_gyro[0]);
+  FloatToArray(&Msg->Data[87], data_out.i_gyro[1]);
+  FloatToArray(&Msg->Data[91], data_out.i_gyro[2]);
+
+  FloatToArray(&Msg->Data[95], data_out.gravity[0]);
+  FloatToArray(&Msg->Data[99], data_out.gravity[1]);
+  FloatToArray(&Msg->Data[103], data_out.gravity[2]);
+
+  FloatToArray(&Msg->Data[107], data_out.linear[0]);
+  FloatToArray(&Msg->Data[111], data_out.linear[1]);
+  FloatToArray(&Msg->Data[115], data_out.linear[2]);
+
+  float heading;
+  int heading_valid;
+
+  MotionEC_manager_calc_heading(data_out.quaternion, &heading, &heading_valid);
+
+  FloatToArray(&Msg->Data[119], heading);
+  Msg->Data[123] = (uint8_t)heading_valid;
+
+  Serialize_s32(&Msg->Data[125], (int32_t)elapsed_time_us, 4);
 }
 
 /**

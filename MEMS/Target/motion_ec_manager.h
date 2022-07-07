@@ -1,8 +1,8 @@
 /**
  ******************************************************************************
- * @file    motion_di_manager.h
+ * @file    motion_ec_manager.h
  * @author  MEMS Software Solutions Team
- * @brief   This file contains definitions for the motion_di_manager.c file
+ * @brief   This file contains definitions for the motion_ec_manager.c file
  ******************************************************************************
  * @attention
  *
@@ -18,39 +18,34 @@
  */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef MOTION_DI_MANAGER_H
-#define MOTION_DI_MANAGER_H
+#ifndef MOTION_EC_MANAGER_H
+#define MOTION_EC_MANAGER_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
-#include "string.h"
-#include "motion_di.h"
+#include <string.h>
+#include "motion_ec.h"
 #include "main.h"
+#include "custom_mems_control.h"
 
 /* Extern variables ----------------------------------------------------------*/
 /* Exported Macros -----------------------------------------------------------*/
 /* Exported Types ------------------------------------------------------------*/
 /* Imported Variables --------------------------------------------------------*/
 /* Exported Functions Prototypes ---------------------------------------------*/
-void MotionDI_manager_init(float freq);
-void MotionDI_get_acc_calibration_mode(MDI_cal_type_t *mode);
-void MotionDI_set_acc_calibration_mode(MDI_cal_type_t mode);
-void MotionDI_get_acc_calibration(MDI_cal_output_t *acc_cal);
-void MotionDI_reset_acc_calibration(void);
-void MotionDI_get_gyro_calibration_mode(MDI_cal_type_t *mode);
-void MotionDI_set_gyro_calibration_mode(MDI_cal_type_t mode);
-void MotionDI_get_gyro_calibration(MDI_cal_output_t *gyro_cal);
-void MotionDI_reset_gyro_calibration(void);
-void MotionDI_manager_run(MDI_input_t *data_in, MDI_output_t *data_out);
-void MotionDI_manager_get_version(char *version, int *length);
+void MotionEC_manager_init(float freq);
+void MotionEC_manager_transform_orientation(MOTION_SENSOR_Axes_t *acc_in, MOTION_SENSOR_Axes_t *mag_in, float acc_out[], float mag_out[]);
+void MotionEC_manager_run(MEC_input_t *data_in, MEC_output_t *data_out);
+void MotionEC_manager_calc_heading(float quaternion[], float *heading, int *heading_valid);
+void MotionEC_manager_get_version(char *version, int *length);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* MOTION_DI_MANAGER_H */
+#endif /* MOTION_EC_MANAGER_H */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

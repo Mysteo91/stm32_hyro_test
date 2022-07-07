@@ -34,12 +34,24 @@ extern "C" {
 #define USE_CUSTOM_MOTION_SENSOR_LSM6DSL_0          1
 #endif
 
+#ifndef USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0
+#define USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0          1
+#endif
+
 #if (USE_CUSTOM_MOTION_SENSOR_LSM6DSL_0 == 1)
 #include "lsm6dsl.h"
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+#include "lis3mdl.h"
+#endif
+
 #if (USE_CUSTOM_MOTION_SENSOR_LSM6DSL_0 == 1)
 #define CUSTOM_LSM6DSL_0 (0)
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+#define CUSTOM_LIS3MDL_0 (USE_CUSTOM_MOTION_SENSOR_LSM6DSL_0)
 #endif
 
 typedef struct
@@ -87,7 +99,7 @@ typedef struct
 #endif
 
 #define CUSTOM_MOTION_FUNCTIONS_NBR    3U
-#define CUSTOM_MOTION_INSTANCES_NBR    (USE_CUSTOM_MOTION_SENSOR_LSM6DSL_0)
+#define CUSTOM_MOTION_INSTANCES_NBR    (USE_CUSTOM_MOTION_SENSOR_LSM6DSL_0 + USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0)
 
 #if (CUSTOM_MOTION_INSTANCES_NBR == 0)
 #error "No motion sensor instance has been selected"

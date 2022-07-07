@@ -48,6 +48,19 @@ int32_t CUSTOM_MOTION_SENSOR_Read_Register(uint32_t Instance, uint8_t Reg, uint8
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      if (LIS3MDL_Read_Reg(MotionCompObj[Instance], Reg, Data) != BSP_ERROR_NONE)
+      {
+        ret = BSP_ERROR_COMPONENT_FAILURE;
+      }
+      else
+      {
+        ret = BSP_ERROR_NONE;
+      }
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -72,6 +85,19 @@ int32_t CUSTOM_MOTION_SENSOR_Write_Register(uint32_t Instance, uint8_t Reg, uint
 #if (USE_CUSTOM_MOTION_SENSOR_LSM6DSL_0 == 1)
     case CUSTOM_LSM6DSL_0:
       if (LSM6DSL_Write_Reg(MotionCompObj[Instance], Reg, Data) != BSP_ERROR_NONE)
+      {
+        ret = BSP_ERROR_COMPONENT_FAILURE;
+      }
+      else
+      {
+        ret = BSP_ERROR_NONE;
+      }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      if (LIS3MDL_Write_Reg(MotionCompObj[Instance], Reg, Data) != BSP_ERROR_NONE)
       {
         ret = BSP_ERROR_COMPONENT_FAILURE;
       }
@@ -134,6 +160,26 @@ int32_t CUSTOM_MOTION_SENSOR_Get_DRDY_Status(uint32_t Instance, uint32_t Functio
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      if ((Function & MOTION_MAGNETO) == MOTION_MAGNETO)
+      {
+        if (LIS3MDL_MAG_Get_DRDY_Status(MotionCompObj[Instance], Status) != BSP_ERROR_NONE)
+        {
+          ret = BSP_ERROR_COMPONENT_FAILURE;
+        }
+        else
+        {
+          ret = BSP_ERROR_NONE;
+        }
+      }
+      else
+      {
+        ret = BSP_ERROR_COMPONENT_FAILURE;
+      }
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -167,6 +213,12 @@ int32_t CUSTOM_MOTION_SENSOR_Enable_Free_Fall_Detection(uint32_t Instance, CUSTO
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -196,6 +248,12 @@ int32_t CUSTOM_MOTION_SENSOR_Disable_Free_Fall_Detection(uint32_t Instance)
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -232,6 +290,12 @@ int32_t CUSTOM_MOTION_SENSOR_Set_Free_Fall_Threshold(uint32_t Instance, uint8_t 
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -262,6 +326,12 @@ int32_t CUSTOM_MOTION_SENSOR_Set_Free_Fall_Duration(uint32_t Instance, uint8_t D
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -297,6 +367,12 @@ int32_t CUSTOM_MOTION_SENSOR_Enable_Pedometer(uint32_t Instance)
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -326,6 +402,12 @@ int32_t CUSTOM_MOTION_SENSOR_Disable_Pedometer(uint32_t Instance)
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -362,6 +444,12 @@ int32_t CUSTOM_MOTION_SENSOR_Set_Pedometer_Threshold(uint32_t Instance, uint8_t 
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -391,6 +479,12 @@ int32_t CUSTOM_MOTION_SENSOR_Reset_Step_Counter(uint32_t Instance)
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -427,6 +521,12 @@ int32_t CUSTOM_MOTION_SENSOR_Get_Step_Count(uint32_t Instance, uint16_t *StepCou
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -460,6 +560,12 @@ int32_t CUSTOM_MOTION_SENSOR_Enable_Single_Tap_Detection(uint32_t Instance, CUST
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -489,6 +595,12 @@ int32_t CUSTOM_MOTION_SENSOR_Disable_Single_Tap_Detection(uint32_t Instance)
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -525,6 +637,12 @@ int32_t CUSTOM_MOTION_SENSOR_Enable_Double_Tap_Detection(uint32_t Instance, CUST
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -554,6 +672,12 @@ int32_t CUSTOM_MOTION_SENSOR_Disable_Double_Tap_Detection(uint32_t Instance)
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -590,6 +714,12 @@ int32_t CUSTOM_MOTION_SENSOR_Set_Tap_Threshold(uint32_t Instance, uint8_t Thresh
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -620,6 +750,12 @@ int32_t CUSTOM_MOTION_SENSOR_Set_Tap_Shock_Time(uint32_t Instance, uint8_t Time)
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -656,6 +792,12 @@ int32_t CUSTOM_MOTION_SENSOR_Set_Tap_Quiet_Time(uint32_t Instance, uint8_t Time)
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -686,6 +828,12 @@ int32_t CUSTOM_MOTION_SENSOR_Set_Tap_Duration_Time(uint32_t Instance, uint8_t Ti
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -722,6 +870,12 @@ int32_t CUSTOM_MOTION_SENSOR_Enable_Tilt_Detection(uint32_t Instance, CUSTOM_MOT
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -751,6 +905,12 @@ int32_t CUSTOM_MOTION_SENSOR_Disable_Tilt_Detection(uint32_t Instance)
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -787,6 +947,12 @@ int32_t CUSTOM_MOTION_SENSOR_Enable_Wake_Up_Detection(uint32_t Instance, CUSTOM_
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -816,6 +982,12 @@ int32_t CUSTOM_MOTION_SENSOR_Disable_Wake_Up_Detection(uint32_t Instance)
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -852,6 +1024,12 @@ int32_t CUSTOM_MOTION_SENSOR_Set_Wake_Up_Threshold(uint32_t Instance, uint8_t Th
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -882,6 +1060,12 @@ int32_t CUSTOM_MOTION_SENSOR_Set_Wake_Up_Duration(uint32_t Instance, uint8_t Dur
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -918,6 +1102,12 @@ int32_t CUSTOM_MOTION_SENSOR_Enable_Inactivity_Detection(uint32_t Instance, CUST
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -947,6 +1137,12 @@ int32_t CUSTOM_MOTION_SENSOR_Disable_Inactivity_Detection(uint32_t Instance)
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -983,6 +1179,12 @@ int32_t CUSTOM_MOTION_SENSOR_Set_Sleep_Duration(uint32_t Instance, uint8_t Durat
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1016,6 +1218,12 @@ int32_t CUSTOM_MOTION_SENSOR_Enable_6D_Orientation(uint32_t Instance, CUSTOM_MOT
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1045,6 +1253,12 @@ int32_t CUSTOM_MOTION_SENSOR_Disable_6D_Orientation(uint32_t Instance)
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -1081,6 +1295,12 @@ int32_t CUSTOM_MOTION_SENSOR_Set_6D_Orientation_Threshold(uint32_t Instance, uin
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1111,6 +1331,12 @@ int32_t CUSTOM_MOTION_SENSOR_Get_6D_Orientation_XL(uint32_t Instance, uint8_t *x
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -1147,6 +1373,12 @@ int32_t CUSTOM_MOTION_SENSOR_Get_6D_Orientation_XH(uint32_t Instance, uint8_t *x
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1177,6 +1409,12 @@ int32_t CUSTOM_MOTION_SENSOR_Get_6D_Orientation_YL(uint32_t Instance, uint8_t *y
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -1213,6 +1451,12 @@ int32_t CUSTOM_MOTION_SENSOR_Get_6D_Orientation_YH(uint32_t Instance, uint8_t *y
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1246,6 +1490,12 @@ int32_t CUSTOM_MOTION_SENSOR_Get_6D_Orientation_ZL(uint32_t Instance, uint8_t *z
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1276,6 +1526,12 @@ int32_t CUSTOM_MOTION_SENSOR_Get_6D_Orientation_ZH(uint32_t Instance, uint8_t *z
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -1313,6 +1569,12 @@ int32_t CUSTOM_MOTION_SENSOR_Get_Event_Status(uint32_t Instance, CUSTOM_MOTION_S
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1346,6 +1608,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Get_Num_Samples(uint32_t Instance, uint16_t *N
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1376,6 +1644,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Get_Full_Status(uint32_t Instance, uint8_t *St
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -1431,6 +1705,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Set_Decimation(uint32_t Instance, uint32_t Fun
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1461,6 +1741,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Set_ODR_Value(uint32_t Instance, float Odr)
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -1497,6 +1783,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Set_INT1_FIFO_Full(uint32_t Instance, uint8_t 
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1527,6 +1819,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Set_Watermark_Level(uint32_t Instance, uint16_
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -1563,6 +1861,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Set_Stop_On_Fth(uint32_t Instance, uint8_t Sta
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1596,6 +1900,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Set_Mode(uint32_t Instance, uint8_t Mode)
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1626,6 +1936,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Get_Pattern(uint32_t Instance, uint16_t *Patte
       {
         ret = BSP_ERROR_NONE;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
@@ -1681,6 +1997,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Get_Axis(uint32_t Instance, uint32_t Function,
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1704,6 +2026,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Set_BDR(uint32_t Instance, uint32_t Function, 
   {
 #if (USE_CUSTOM_MOTION_SENSOR_LSM6DSL_0 == 1)
     case CUSTOM_LSM6DSL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
       ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
@@ -1734,6 +2062,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Get_Tag(uint32_t Instance, uint8_t *Tag)
       break;
 #endif
 
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
     default:
       ret = BSP_ERROR_WRONG_PARAM;
       break;
@@ -1757,6 +2091,12 @@ int32_t CUSTOM_MOTION_SENSOR_FIFO_Get_Axes(uint32_t Instance, uint32_t Function,
   {
 #if (USE_CUSTOM_MOTION_SENSOR_LSM6DSL_0 == 1)
     case CUSTOM_LSM6DSL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
       ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
@@ -1810,6 +2150,12 @@ int32_t CUSTOM_MOTION_SENSOR_Set_SelfTest(uint32_t Instance, uint32_t Function, 
       {
         ret = BSP_ERROR_WRONG_PARAM;
       }
+      break;
+#endif
+
+#if (USE_CUSTOM_MOTION_SENSOR_LIS3MDL_0 == 1)
+    case CUSTOM_LIS3MDL_0:
+      ret = BSP_ERROR_COMPONENT_FAILURE;
       break;
 #endif
 
