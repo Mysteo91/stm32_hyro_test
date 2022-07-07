@@ -29,6 +29,7 @@ extern "C" {
 #include "serial_protocol.h"
 #include "serial_cmd.h"
 #include "bsp_ip_conf.h"
+#include "motion_di_manager.h"
 
 /* Exported types ------------------------------------------------------------*/
 typedef struct {
@@ -69,7 +70,7 @@ typedef struct {
 #define GYROSCOPE_SENSOR      0x00000020U
 #define MAGNETIC_SENSOR       0x00000040U
 
-#define STREAMING_MSG_LENGTH  87
+#define STREAMING_MSG_LENGTH  149
 
 #define REQUIRED_DATA  (ACCELEROMETER_SENSOR + GYROSCOPE_SENSOR)
 

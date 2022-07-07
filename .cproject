@@ -52,6 +52,7 @@
                   <listOptionValue builtIn="false" value="../Drivers/BSP/Components/lsm6dsl" />
                   <listOptionValue builtIn="false" value="../Drivers/BSP/Components/Common" />
                   <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionGC_Library/Inc" />
+                  <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionDI_Library/Inc" />
                 </option>
                 <option id="gnu.c.compiler.option.preprocessor.def.symbols.1756877762" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
                   <listOptionValue builtIn="false" value="USE_HAL_DRIVER" />
@@ -79,6 +80,7 @@
                   <listOptionValue builtIn="false" value="../Drivers/BSP/Components/lsm6dsl" />
                   <listOptionValue builtIn="false" value="../Drivers/BSP/Components/Common" />
                   <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionGC_Library/Inc" />
+                  <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionDI_Library/Inc" />
                 </option>
                 <option id="gnu.cpp.compiler.option.preprocessor.def.1972210959" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
                   <listOptionValue builtIn="false" value="USE_HAL_DRIVER" />
@@ -92,9 +94,11 @@
                 <option id="fr.ac6.managedbuild.tool.gnu.cross.c.linker.script.2065965763" name="Linker Script (-T)" superClass="fr.ac6.managedbuild.tool.gnu.cross.c.linker.script" value="../STM32L475VGTx_FLASH.ld" valueType="string" />
                 <option id="gnu.c.link.option.libs.567271404" name="Libraries (-l)" superClass="gnu.c.link.option.libs" valueType="libs">
                   <listOptionValue builtIn="false" value=":MotionGC_CM4F_wc16_ot.a" />
+                  <listOptionValue builtIn="false" value=":MotionDI_CM4F_wc16_ot.a" />
                 </option>
                 <option id="gnu.c.link.option.paths.669321935" name="Library search path (-L)" superClass="gnu.c.link.option.paths" valueType="libPaths">
                   <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionGC_Library/Lib" />
+                  <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionDI_Library/Lib" />
                 </option>
                 <option id="gnu.c.link.option.ldflags.765035995" superClass="gnu.c.link.option.ldflags" value="-specs=nosys.specs -specs=nano.specs" valueType="string" />
                 <option id="gnu.c.link.option.other.764404700" name="Other options (-Xlinker [option])" superClass="gnu.c.link.option.other" useByScannerDiscovery="false" valueType="stringList" />
@@ -107,9 +111,11 @@
                 <option id="fr.ac6.managedbuild.tool.gnu.cross.cpp.linker.script.1480903889" name="Linker Script (-T)" superClass="fr.ac6.managedbuild.tool.gnu.cross.cpp.linker.script" value="../STM32L475VGTx_FLASH.ld" valueType="string" />
                 <option id="gnu.cpp.link.option.libs.781147199" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" valueType="libs">
                   <listOptionValue builtIn="false" value=":MotionGC_CM4F_wc16_ot.a" />
+                  <listOptionValue builtIn="false" value=":MotionDI_CM4F_wc16_ot.a" />
                 </option>
                 <option id="gnu.cpp.link.option.paths.1685060605" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" valueType="libPaths">
                   <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionGC_Library/Lib" />
+                  <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionDI_Library/Lib" />
                 </option>
                 <option id="gnu.cpp.link.option.flags.1007308947" superClass="gnu.cpp.link.option.flags" value="-specs=nosys.specs -specs=nano.specs" valueType="string" />
                 <option id="gnu.cpp.link.option.other.79278467" name="Other options (-Xlinker [option])" superClass="gnu.cpp.link.option.other" useByScannerDiscovery="false" valueType="stringList" />
@@ -187,6 +193,7 @@
                   <listOptionValue builtIn="false" value="../Drivers/BSP/Components/lsm6dsl" />
                   <listOptionValue builtIn="false" value="../Drivers/BSP/Components/Common" />
                   <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionGC_Library/Inc" />
+                  <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionDI_Library/Inc" />
                 </option>
                 <option id="gnu.c.compiler.option.preprocessor.def.symbols.1756877762" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
                   <listOptionValue builtIn="false" value="USE_HAL_DRIVER" />
@@ -214,6 +221,7 @@
                   <listOptionValue builtIn="false" value="../Drivers/BSP/Components/lsm6dsl" />
                   <listOptionValue builtIn="false" value="../Drivers/BSP/Components/Common" />
                   <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionGC_Library/Inc" />
+                  <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionDI_Library/Inc" />
                 </option>
                 <option id="gnu.cpp.compiler.option.preprocessor.def.symbols.1901893284" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
                   <listOptionValue builtIn="false" value="USE_HAL_DRIVER" />
@@ -227,9 +235,11 @@
                 <option id="fr.ac6.managedbuild.tool.gnu.cross.c.linker.script.2065965763" name="Linker Script (-T)" superClass="fr.ac6.managedbuild.tool.gnu.cross.c.linker.script" value="../STM32L475VGTx_FLASH.ld" valueType="string" />
                 <option id="gnu.c.link.option.libs.567271404" name="Libraries (-l)" superClass="gnu.c.link.option.libs" valueType="libs">
                   <listOptionValue builtIn="false" value=":MotionGC_CM4F_wc16_ot.a" />
+                  <listOptionValue builtIn="false" value=":MotionDI_CM4F_wc16_ot.a" />
                 </option>
                 <option id="gnu.c.link.option.paths.669321935" name="Library search path (-L)" superClass="gnu.c.link.option.paths" valueType="libPaths">
                   <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionGC_Library/Lib" />
+                  <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionDI_Library/Lib" />
                 </option>
                 <option id="gnu.c.link.option.ldflags.765035995" superClass="gnu.c.link.option.ldflags" value="-specs=nosys.specs -specs=nano.specs" valueType="string" />
                 <option id="gnu.c.link.option.other.764404700" name="Other options (-Xlinker [option])" superClass="gnu.c.link.option.other" useByScannerDiscovery="false" valueType="stringList" />
@@ -242,9 +252,11 @@
                 <option id="fr.ac6.managedbuild.tool.gnu.cross.cpp.linker.script.1480903889" name="Linker Script (-T)" superClass="fr.ac6.managedbuild.tool.gnu.cross.cpp.linker.script" value="../STM32L475VGTx_FLASH.ld" valueType="string" />
                 <option id="gnu.cpp.link.option.libs.781147199" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" valueType="libs">
                   <listOptionValue builtIn="false" value=":MotionGC_CM4F_wc16_ot.a" />
+                  <listOptionValue builtIn="false" value=":MotionDI_CM4F_wc16_ot.a" />
                 </option>
                 <option id="gnu.cpp.link.option.paths.1685060605" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" valueType="libPaths">
                   <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionGC_Library/Lib" />
+                  <listOptionValue builtIn="false" value="../Middlewares/ST/STM32_MotionDI_Library/Lib" />
                 </option>
                 <option id="gnu.cpp.link.option.ldflags.1527433963" superClass="gnu.cpp.link.option.ldflags" value="-specs=nosys.specs -specs=nano.specs" valueType="string" />
                 <option id="gnu.cpp.link.option.other.79278467" name="Other options (-Xlinker [option])" superClass="gnu.cpp.link.option.other" useByScannerDiscovery="false" valueType="stringList" />

@@ -25,22 +25,28 @@ extern "C" {
 #include "app_mems.h"
 #include "main.h"
 #include <stdio.h>
-#include "tim.h"
+
 #include "stm32l4xx_hal.h"
 #include "b_l475e_iot01a2.h"
 #include "com.h"
 #include "demo_serial.h"
 #include "bsp_ip_conf.h"
 #include "fw_version.h"
-#include "motion_gc_manager.h"
-
+#include "motion_di_manager.h"
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 #define DWT_LAR_KEY  0xC5ACCE55 /* DWT register unlock key */
-#define ALGO_FREQ  50U /* Algorithm frequency >= 50Hz */
+#define ALGO_FREQ  100U /* Algorithm frequency 100Hz */
 #define ACC_ODR  ((float)ALGO_FREQ)
-#define ACC_FS  4 /* FS = <-4g, 4g> */
+#define ACC_FS  2 /* FS = <-2g, 2g> */
+#define ALGO_PERIOD  (1000000U / ALGO_FREQ) /* Algorithm period [us] */
+#define FROM_MG_TO_G  0.001f
+#define FROM_G_TO_MG  1000.0f
+#define FROM_MDPS_TO_DPS  0.001f
+#define FROM_DPS_TO_MDPS  1000.0f
+#define FROM_MGAUSS_TO_UT50  (0.1f/50.0f)
+#define FROM_UT50_TO_MGAUSS  500.0f
 
 /* Public variables ----------------------------------------------------------*/
 volatile uint8_t DataLoggerActive = 0;
@@ -54,6 +60,8 @@ int OfflineDataReadIndex = 0;
 int OfflineDataWriteIndex = 0;
 int OfflineDataCount = 0;
 uint32_t AlgoFreq = ALGO_FREQ;
+MDI_cal_type_t AccCalMode = MDI_CAL_NONE;
+MDI_cal_type_t GyrCalMode = MDI_CAL_NONE;
 
 /* Extern variables ----------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
@@ -64,13 +72,12 @@ static MOTION_SENSOR_Axes_t MagValue;
 static float PressValue;
 static float TempValue;
 static float HumValue;
-static const uint32_t ReportInterval = 1000U / ALGO_FREQ;
-static MGC_knobs_t Knobs;
+static int64_t Timestamp = 0;
 
 /* Private function prototypes -----------------------------------------------*/
-static void MX_GyroscopeCalibration_Init(void);
-static void MX_GyroscopeCalibration_Process(void);
-static void GC_Data_Handler(TMsg *Msg);
+static void MX_DynamicInclinometer_Init(void);
+static void MX_DynamicInclinometer_Process(void);
+static void DI_Data_Handler(TMsg *Msg, TMsg *Cmd);
 static void Init_Sensors(void);
 static void RTC_Handler(TMsg *Msg);
 static void Accelero_Sensor_Handler(TMsg *Msg);
@@ -101,7 +108,7 @@ void MX_MEMS_Init(void)
 
   /* Initialize the peripherals and the MEMS components */
 
-  MX_GyroscopeCalibration_Init();
+  MX_DynamicInclinometer_Init();
 
   /* USER CODE BEGIN MEMS_Init_PostTreatment */
 
@@ -117,7 +124,7 @@ void MX_MEMS_Process(void)
 
   /* USER CODE END MEMS_Process_PreTreatment */
 
-  MX_GyroscopeCalibration_Process();
+  MX_DynamicInclinometer_Process();
 
   /* USER CODE BEGIN MEMS_Process_PostTreatment */
 
@@ -144,11 +151,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   * @brief  Initialize the application
   * @retval None
   */
-static void MX_GyroscopeCalibration_Init(void)
+static void MX_DynamicInclinometer_Init(void)
 {
-  MGC_output_t start_gyro_bias;
-  float sample_frequency;
-
 #ifdef BSP_IP_MEMS_INT1_PIN_NUM
   /* Force MEMS INT1 pin of the sensor low during startup in order to disable I3C and enable I2C. This function needs
    * to be called only if user wants to disable I3C / enable I2C and didn't put the pull-down resistor to MEMS INT1 pin
@@ -178,31 +182,12 @@ static void MX_GyroscopeCalibration_Init(void)
   MEMS_INT1_Init();
 #endif
 
-  /* Gyroscope Calibration API initialization function */
-  MotionGC_manager_init((float)ALGO_FREQ);
+  /* DynamicInclinometer API initialization function */
+  MotionDI_manager_init((int)ALGO_FREQ);
 
   /* OPTIONAL */
   /* Get library version */
-  MotionGC_manager_get_version(LibVersion, &LibVersionLen);
-
-  /* OPTIONAL */
-  /* Get current settings and set desired ones */
-  MotionGC_GetKnobs(&Knobs);
-  Knobs.AccThr = 0.008f;
-  Knobs.GyroThr = 0.15f;
-  (void)MotionGC_SetKnobs(&Knobs);
-
-  /* OPTIONAL */
-  /* Set initial gyroscope bias */
-  start_gyro_bias.GyroBiasX = 0.0f;
-  start_gyro_bias.GyroBiasY = 0.0f;
-  start_gyro_bias.GyroBiasZ = 0.0f;
-  MotionGC_manager_set_params(&start_gyro_bias);
-
-  /* OPTIONAL */
-  /* Set sample frequency */
-  sample_frequency = 1000.0f / (float)ReportInterval;
-  MotionGC_manager_set_frequency(sample_frequency);
+  MotionDI_manager_get_version(LibVersion, &LibVersionLen);
 
   DWT_Init();
 
@@ -218,7 +203,7 @@ static void MX_GyroscopeCalibration_Init(void)
   * @brief  Process of the application
   * @retval None
   */
-static void MX_GyroscopeCalibration_Process(void)
+static void MX_DynamicInclinometer_Process(void)
 {
   static TMsg msg_dat;
   static TMsg msg_cmd;
@@ -244,8 +229,8 @@ static void MX_GyroscopeCalibration_Process(void)
     Temperature_Sensor_Handler(&msg_dat);
     Pressure_Sensor_Handler(&msg_dat);
 
-    /* Gyroscope Calibration specific part */
-    GC_Data_Handler(&msg_dat);
+    /* DynamicInclinometer specific part */
+    DI_Data_Handler(&msg_dat, &msg_cmd);
 
     /* Send data stream */
     INIT_STREAMING_HEADER(&msg_dat);
@@ -334,56 +319,102 @@ static void RTC_Handler(TMsg *Msg)
 }
 
 /**
- * @brief  Gyroscope Calibration data handler
- * @param  Msg the Gyroscope Calibration data part of the stream
+ * @brief  Dynamic Inclinometer data handler
+ * @param  Msg the Dynamic Inclinometer data part of the stream
+ * @param  Cmd the Dynamic Inclinometer command to GUI
  * @retval None
  */
-static void GC_Data_Handler(TMsg *Msg)
+static void DI_Data_Handler(TMsg *Msg, TMsg *Cmd)
 {
-  uint32_t elapsed_time_us = 0U;
-  int bias_update = 0;
-  MGC_input_t data_in;
-  MGC_output_t data_out;
-  MOTION_SENSOR_Axes_t GyrComp;
+  uint32_t         elapsed_time_us = 0U;
+  MDI_input_t      data_in;
+  MDI_output_t     data_out;
+  MDI_cal_type_t   acc_cal_mode;
+  MDI_cal_type_t   gyro_cal_mode;
+  MDI_cal_output_t acc_cal;
+  MDI_cal_output_t gyro_cal;
 
   if ((SensorsEnabled & ACCELEROMETER_SENSOR) == ACCELEROMETER_SENSOR)
   {
     if ((SensorsEnabled & GYROSCOPE_SENSOR) == GYROSCOPE_SENSOR)
     {
       /* Convert acceleration from [mg] to [g] */
-      data_in.Acc[0] = (float)AccValue.x / 1000.0f;
-      data_in.Acc[1] = (float)AccValue.y / 1000.0f;
-      data_in.Acc[2] = (float)AccValue.z / 1000.0f;
+      data_in.Acc[0] = (float)AccValue.x * FROM_MG_TO_G;
+      data_in.Acc[1] = (float)AccValue.y * FROM_MG_TO_G;
+      data_in.Acc[2] = (float)AccValue.z * FROM_MG_TO_G;
 
       /* Convert angular velocity from [mdps] to [dps] */
-      data_in.Gyro[0] = (float)GyrValue.x / 1000.0f;
-      data_in.Gyro[1] = (float)GyrValue.y / 1000.0f;
-      data_in.Gyro[2] = (float)GyrValue.z / 1000.0f;
+      data_in.Gyro[0] = (float)GyrValue.x * FROM_MDPS_TO_DPS;
+      data_in.Gyro[1] = (float)GyrValue.y * FROM_MDPS_TO_DPS;
+      data_in.Gyro[2] = (float)GyrValue.z * FROM_MDPS_TO_DPS;
 
-      /* Run Gyroscope Calibration algorithm */
+      data_in.Timestamp = Timestamp;
+      Timestamp += ALGO_PERIOD;
+
+      /* Run Dynamic Inclinometer algorithm */
       BSP_LED_On(LED2);
       DWT_Start();
-      MotionGC_manager_update(&data_in, &data_out, &bias_update);
+      MotionDI_manager_run(&data_in, &data_out);
       elapsed_time_us = DWT_Stop();
       BSP_LED_Off(LED2);
 
-      /* Do offset & scale factor calibration */
-      MotionGC_manager_compensate(&GyrValue, &GyrComp);
+      /* Check calibration mode */
+      MotionDI_get_acc_calibration_mode(&acc_cal_mode);
+      MotionDI_get_gyro_calibration_mode(&gyro_cal_mode);
 
-      /* Offset coefficients */
-      Serialize_s32(&Msg->Data[55], (int32_t)gyro_bias_to_mdps(data_out.GyroBiasX), 4);
-      Serialize_s32(&Msg->Data[59], (int32_t)gyro_bias_to_mdps(data_out.GyroBiasY), 4);
-      Serialize_s32(&Msg->Data[63], (int32_t)gyro_bias_to_mdps(data_out.GyroBiasZ), 4);
+      if (acc_cal_mode != AccCalMode)
+      {
+        AccCalMode = acc_cal_mode;
 
-      /* Calibrated data */
-      Serialize_s32(&Msg->Data[67], (int32_t) GyrComp.x, 4);
-      Serialize_s32(&Msg->Data[71], (int32_t) GyrComp.y, 4);
-      Serialize_s32(&Msg->Data[75], (int32_t) GyrComp.z, 4);
+        INIT_STREAMING_HEADER(Cmd);
+        Cmd->Data[2] = CMD_Calibration_Mode + CMD_Reply_Add;
+        Cmd->Data[3] = (uint8_t)ACCELEROMETER_SENSOR;
+        Cmd->Data[4] = (uint8_t)AccCalMode;
+        Cmd->Len = 5;
+        UART_SendMsg(Cmd);
+      }
 
-      /* Calibration quality */
-      Serialize_s32(&Msg->Data[79], (int32_t) bias_update, 4);
+      if (gyro_cal_mode != GyrCalMode)
+      {
+        GyrCalMode = gyro_cal_mode;
 
-      Serialize_s32(&Msg->Data[83], (int32_t)elapsed_time_us, 4);
+        INIT_STREAMING_HEADER(Cmd);
+        Cmd->Data[2] = CMD_Calibration_Mode + CMD_Reply_Add;
+        Cmd->Data[3] = (uint8_t)GYROSCOPE_SENSOR;
+        Cmd->Data[4] = (uint8_t)GyrCalMode;
+        Cmd->Len = 5;
+        UART_SendMsg(Cmd);
+      }
+
+      /* Get calibration parameters */
+      MotionDI_get_acc_calibration(&acc_cal);
+      MotionDI_get_gyro_calibration(&gyro_cal);
+
+      /* Convert accelerometer calibration parameters from [g] to [mg] */
+      acc_cal.Bias[0] *= FROM_G_TO_MG;
+      acc_cal.Bias[1] *= FROM_G_TO_MG;
+      acc_cal.Bias[2] *= FROM_G_TO_MG;
+
+      /* Convert gyroscope calibration parameters from [dps] to [mdps] */
+      gyro_cal.Bias[0] *= FROM_DPS_TO_MDPS;
+      gyro_cal.Bias[1] *= FROM_DPS_TO_MDPS;
+      gyro_cal.Bias[2] *= FROM_DPS_TO_MDPS;
+
+      (void)memcpy(&Msg->Data[55], (void *)data_out.quaternion, 4U * sizeof(float));
+      (void)memcpy(&Msg->Data[71], (void *)data_out.rotation, 3U * sizeof(float));
+      (void)memcpy(&Msg->Data[83], (void *)data_out.gravity, 3U * sizeof(float));
+      (void)memcpy(&Msg->Data[95], (void *)data_out.linear_acceleration, 3U * sizeof(float));
+
+      (void)memcpy(&Msg->Data[107], (void *)acc_cal.Bias, 3U * sizeof(float));
+      (void)memcpy(&Msg->Data[119], (void *) & (acc_cal.SF_Matrix[0][0]), sizeof(float));
+      (void)memcpy(&Msg->Data[123], (void *) & (acc_cal.SF_Matrix[1][1]), sizeof(float));
+      (void)memcpy(&Msg->Data[127], (void *) & (acc_cal.SF_Matrix[2][2]), sizeof(float));
+      Msg->Data[131] = (uint8_t)acc_cal.CalQuality;
+
+      (void)memcpy(&Msg->Data[132], (void *)gyro_cal.Bias, 3U * sizeof(float));
+      Msg->Data[144] = (uint8_t)gyro_cal.CalQuality;
+
+      Serialize_s32(&Msg->Data[145], (int32_t)elapsed_time_us, 4);
     }
   }
 }
@@ -552,7 +583,6 @@ static void TIM_Config(uint32_t Freq)
   {
     Error_Handler();
   }
-    HAL_TIM_Base_Start_IT(&BSP_IP_TIM_Handle);
 }
 
 #ifdef BSP_IP_MEMS_INT1_PIN_NUM

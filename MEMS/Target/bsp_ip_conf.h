@@ -29,7 +29,7 @@ extern "C" {
 
 #include "custom_mems_control.h"
 #include "custom_mems_control_ex.h"
-
+#include "tim.h"
 /* Exported defines ----------------------------------------------------------*/
 
 #define BOARD_NAME "CUSTOM"
